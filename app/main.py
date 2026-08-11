@@ -2,18 +2,17 @@ import hashlib
 import hmac
 import logging
 
-from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from .config import Settings, get_settings
 from .models import WebhookPayload
-from .processor import Processor
+from .queue import enqueue_transcription
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger("zammad-autotranscription")
 
 settings: Settings = get_settings()
-processor = Processor(settings)
 
 app = FastAPI(title="Zammad Auto Transcription", version="0.1.0")
 
@@ -54,7 +53,6 @@ def health() -> dict:
 @app.post("/webhook/zammad")
 async def webhook(
     request: Request,
-    background_tasks: BackgroundTasks,
     x_hub_signature: str | None = Header(default=None),
     authorization: str | None = Header(default=None),
 ) -> JSONResponse:
@@ -76,15 +74,9 @@ async def webhook(
     if payload.ticket.id is None:
         raise HTTPException(status_code=422, detail="ticket.id absent")
 
-    background_tasks.add_task(run_pipeline, payload)
-    return JSONResponse(status_code=202, content={"status": "accepted", "ticket_id": payload.ticket.id})
-
-
-def run_pipeline(payload: WebhookPayload) -> None:
-    try:
-        processor.process(payload)
-    except Exception as exc:
-        logger.exception("Échec du traitement du ticket %s : %s", payload.ticket.id, exc)
+    job_id = enqueue_transcription(payload.model_dump(mode="json"))
+    logger.info("Ticket %s enfile (job %s)", payload.ticket.id, job_id)
+    return JSONResponse(status_code=202, content={"status": "accepted", "ticket_id": payload.ticket.id, "job_id": job_id})
 
 
 if __name__ == "__main__":

@@ -62,10 +62,11 @@ def test_valid_signature_and_pipeline():
     headers = signed_headers("secret", body)
 
     with patch("app.main.settings.webhook_secret", "secret"), \
-         patch("app.main.processor.process", return_value={"status": "ok"}) as mock_process:
+         patch("app.main.enqueue_transcription", return_value="job-123") as mock_enqueue:
         r = client.post("/webhook/zammad", content=body, headers=headers)
     assert r.status_code == 202
-    assert mock_process.called
+    assert mock_enqueue.called
+    assert r.json()["job_id"] == "job-123"
 
 
 def test_no_audio_skipped():
@@ -77,7 +78,8 @@ def test_no_audio_skipped():
     ).encode()
     headers = signed_headers("secret", body)
     with patch("app.main.settings.webhook_secret", "secret"):
-        with patch("app.main.processor.process", return_value={"status": "no_audio"}) as m:
+        with patch("app.main.enqueue_transcription", return_value="job-456") as m:
             r = client.post("/webhook/zammad", content=body, headers=headers)
     assert r.status_code == 202
     assert m.called
+    assert r.json()["job_id"] == "job-456"

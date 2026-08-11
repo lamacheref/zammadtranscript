@@ -18,7 +18,7 @@
 - [x] Gestion des erreurs et retries Zammad (3 tentatives, backoff 10s/30s/60s)
 - [x] Idempotence (anti double-transcription via fichier d'état par ticket/article)
 - [x] Sécurité : secret webhook (HMAC `X-Hub-Signature` + bearer token), variables d'environnement
-- [ ] File d'attente asynchrone (Redis + RQ) : webhook enqueue → worker traite
+- [x] File d'attente asynchrone (Redis + RQ) : webhook enqueue → worker traite
 - [x] Optimisation CPU/mémoire pour conteneur (quantification `int8`, threads configurables)
 
 ## Phase 4 — Docker & CI/CD ✅
@@ -59,7 +59,7 @@
 - [x] Error handling and Zammad retries (3 attempts, backoff 10s/30s/60s)
 - [x] Idempotency (anti double-transcription via state file per ticket/article)
 - [x] Security: webhook secret (HMAC `X-Hub-Signature` + bearer token), environment variables
-- [ ] Async queue (Redis + RQ): webhook enqueues → worker processes
+- [x] Async queue (Redis + RQ): webhook enqueues → worker processes
 - [x] CPU/memory optimization for container (quantization `int8`, configurable threads)
 
 ## Phase 4 — Docker & CI/CD ✅

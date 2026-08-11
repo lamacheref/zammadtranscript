@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
 
+    redis_url: str = "redis://localhost:6379"
+    rq_queue_name: str = "transcription"
+
 
 @lru_cache
 def get_settings() -> Settings:

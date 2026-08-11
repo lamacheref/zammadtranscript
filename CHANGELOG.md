@@ -36,6 +36,15 @@ Toutes les modifications notables de ce projet sont documentées dans ce fichier
 - Remote GitHub configuré : `git@github.com:lamacheref/zammadtranscript.git`
 - Mise à jour docs : suppression références LXC/community-scripts, ajout sections anglaises
 
+### Architecture asynchrone (Queue Redis + RQ)
+- `app/queue.py` : file RQ, fonction job `process_transcription_job`, `enqueue_transcription`
+- `app/worker.py` : point d'entrée worker RQ (`python -m app.worker`)
+- `app/main.py` : webhook enqueue au lieu de `BackgroundTasks`, réponse `202` avec `job_id`
+- `docker-compose.yml` : services Redis + worker, healthchecks, volumes partagés
+- `requirements.txt` : `redis>=5.0`, `rq>=1.16`
+- `config.py` : `redis_url`, `rq_queue_name`
+- Tests mis à jour : mock `enqueue_transcription` au lieu de `processor.process`
+
 ---
 
 # Changelog (English)
@@ -67,7 +76,14 @@ All notable changes to this project are documented in this file.
   idempotency via state file, and actual `customer_id` behavior
 - `README.md`: aligned operation (title/`customer_id`/article, client name)
 
-### Docker & CI/CD Transition
+### Async Architecture (Redis Queue + RQ)
+- `app/queue.py`: RQ queue, `process_transcription_job` job function, `enqueue_transcription`
+- `app/worker.py`: RQ worker entry point (`python -m app.worker`)
+- `app/main.py`: webhook enqueues instead of `BackgroundTasks`, `202` response with `job_id`
+- `docker-compose.yml`: Redis + worker services, healthchecks, shared volumes
+- `requirements.txt`: `redis>=5.0`, `rq>=1.16`
+- `config.py`: `redis_url`, `rq_queue_name`
+- Tests updated: mock `enqueue_transcription` instead of `processor.process`
 - Multi-stage `Dockerfile` (builder + runtime, Python 3.12, ffmpeg, Whisper/Ollama deps)
 - `docker-compose.yml` (app + Ollama, persistent volumes, healthchecks, restart policy)
 - GitHub Actions CI/CD (`.github/workflows/ci-cd.yml`): test → build/push GHCR → deploy staging
