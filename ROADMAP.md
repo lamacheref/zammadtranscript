@@ -18,7 +18,7 @@
 - [x] Gestion des erreurs et retries Zammad (3 tentatives, backoff 10s/30s/60s)
 - [x] Idempotence (anti double-transcription via fichier d'état par ticket/article)
 - [x] Sécurité : secret webhook (HMAC `X-Hub-Signature` + bearer token), variables d'environnement
-- [ ] Rate limiting sur l'endpoint public
+- [ ] File d'attente asynchrone (Redis + RQ) : webhook enqueue → worker traite
 - [x] Optimisation CPU/mémoire pour conteneur (quantification `int8`, threads configurables)
 
 ## Phase 4 — Docker & CI/CD ✅
@@ -31,7 +31,7 @@
 ## Phase 5 — Améliorations
 
 - [ ] Utiliser le nom client extrait par le LLM pour créer/rechercher le client Zammad
-- [ ] Rate limiting sur `POST /webhook/zammad`
+- [ ] Interface web manuelle : saisie n° ticket → récupération audio → transcription → MAJ ticket
 - [ ] Logging structuré (JSON) + observabilité (métriques Prometheus optionnelles)
 - [ ] Support multi-langues (détection langue Whisper)
 - [ ] Couverture tests unitaires/intégration > 80%
@@ -59,7 +59,7 @@
 - [x] Error handling and Zammad retries (3 attempts, backoff 10s/30s/60s)
 - [x] Idempotency (anti double-transcription via state file per ticket/article)
 - [x] Security: webhook secret (HMAC `X-Hub-Signature` + bearer token), environment variables
-- [ ] Rate limiting on public endpoint
+- [ ] Async queue (Redis + RQ): webhook enqueues → worker processes
 - [x] CPU/memory optimization for container (quantization `int8`, configurable threads)
 
 ## Phase 4 — Docker & CI/CD ✅
@@ -72,7 +72,7 @@
 ## Phase 5 — Enhancements
 
 - [ ] Use LLM-extracted client name to create/lookup Zammad customer
-- [ ] Rate limiting on `POST /webhook/zammad`
+- [ ] Manual web UI: enter ticket number → fetch audio → transcribe → update ticket
 - [ ] Structured logging (JSON) + observability (Prometheus metrics optional)
 - [ ] Multi-language support (Whisper language detection)
 - [ ] Unit/integration test coverage > 80%
