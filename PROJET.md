@@ -1,15 +1,15 @@
 # Zammad-Auto-Transcription
 
 ## Objet
-Ce projet a pour objectif de créer un moteur simple de transcription recevant les webhooks zammad pour transcrire au mieux les messages réaliser par téléphone. Le fichier est un fichier "message vocal" envoyé par notre instance 3cx et reçu dans un ticket. 
+Ce projet a pour objectif de créer un moteur simple de transcription recevant les webhooks Zammad pour transcrire au mieux les messages vocaux reçus par téléphone. Le fichier est un "message vocal" envoyé par notre instance 3CX et reçu dans un ticket.
 
-Une fois la transcription effectuer, un IA simple local rédige un titre au ticket et le programme remonte les modifications :
+Une fois la transcription effectuée, un LLM local rédige un titre au ticket et le programme remonte les modifications :
 - Titre,
-- Client, 
+- Client (si déjà connu),
 - Texte transcrit depuis le message vocal
-à notre instance Zammad.
+vers notre instance Zammad.
 
-L'ensemble doit être possible dans un petit LXC CPU only.
+L'ensemble doit être possible dans un conteneur Docker (CPU only).
 
 ## Protocole
 
@@ -21,9 +21,9 @@ Flux complet :
 2. Zammad déclenche un webhook HTTP POST vers le serveur de transcription.
 3. Le serveur télécharge le fichier audio depuis le ticket.
 4. Le moteur de transcription (Whisper local, CPU) transforme l'audio en texte.
-5. Un LLM local rédige un titre de ticket et identifie le client.
+5. Un LLM local rédige un titre de ticket et identifie le nom du client.
 6. Le programme met à jour le ticket Zammad via l'API REST (titre, client, texte transcrit).
-7. Le serveur répond au webhook.
+7. Le serveur répond au webhook (`202 Accepted`).
 
 ### 2. Composants et stack
 
@@ -31,8 +31,9 @@ Flux complet :
 |-----------|------|-------------|
 | Serveur webhook | Réception des webhooks Zammad | Python + FastAPI/uvicorn |
 | Moteur de transcription | Transcription audio local CPU | faster-whisper (modèle `base`/`small`) |
-| LLM local | Titre + extraction client | Ollama (ex: `llama3.2`, `qwen2.5`) |
-| Client API Zammad | Lecture / écriture des tickets | API REST Zammad + token Bearer |
+| LLM local | Titre + extraction nom client | Ollama (ex: `llama3.2`, `qwen2.5`) |
+| Client API Zammad | Lecture / écriture des tickets | API REST Zammad + token (`Token token=…`) |
+| Orchestration | Conteneurisation, CI/CD | Docker, Docker Compose, GitHub Actions |
 
 ### 3. Données d'entrée (webhook Zammad)
 
@@ -49,35 +50,119 @@ Règles :
 
 ### 4. Pipeline de traitement
 
-1. **Réception** : `POST /webhook/zammad`, validation d'un secret webhook optionnel.
+1. **Réception** : `POST /webhook/zammad`, validation d'un secret webhook optionnel (HMAC + bearer).
 2. **Téléchargement** : GET de l'attachment via l'API Zammad.
 3. **Prétraitement** : conversion `ffmpeg` si besoin (mono, 16 kHz).
 4. **Transcription** : faster-whisper, segmentation par phrase.
 5. **Post-traitement** : nettoyage (numéros de téléphone, adresses, timestamps).
-6. **Rédaction** : prompt structuré vers le LLM local → titre (≤ 80 caractères) + client si identifiable.
-7. **Mise à jour Zammad** : PATCH du titre + POST d'un article de transcription + mise à jour du client.
+6. **Rédaction** : prompt structuré vers le LLM local → titre (≤ 80 caractères) + nom du client si identifiable.
+7. **Mise à jour Zammad** : PUT du titre + POST d'un article de transcription + mise à jour du `customer_id` (repris du ticket si présent, le nom extrait par le LLM ne sert pas encore à créer/rechercher le client).
 
 ### 5. Mise à jour Zammad (sortie)
 
 - `PUT /api/v1/tickets/{id}` : mise à jour du `title` et du `customer_id`.
-- `POST /api/v1/tickets/{id}/articles` : corps = transcription du message vocal.
+- `POST /api/v1/tickets/{id}/articles` : corps = transcription du message vocal (type `note`).
 
 ### 6. Erreurs et idempotence
 
-- Répondre `200 OK` uniquement après traitement complet ; `5xx` en cas d'échec (retry Zammad).
-- Traitement en arrière-plan : répondre rapidement au webhook, exécuter la transcription, puis envoyer les mises à jour à Zammad.
-- Idempotence : marquer le ticket (artefact `transcription_done` ou hash de l'article) pour éviter les doubles transcriptions en cas de renvoi du webhook.
+- Répondre immédiatement `202 Accepted` au webhook, puis traiter le ticket en arrière-plan (FastAPI `BackgroundTasks`).
+- En cas d'échec du pipeline, retries internes (3 tentatives, backoff 10s/30s/60s) ; après épuisement, l'erreur est consignée et le webhook a déjà répondu.
+- Idempotence : un fichier d'état par couple ticket/article (`app/_data/state/<ticket>_<article>.json`) évite les doubles transcriptions en cas de renvoi du webhook.
 
-### 7. Contraintes LXC (CPU only)
+### 7. Contraintes Docker (CPU only)
 
 - Transcription : modèle `base`/`small` (≈ 1-2 Go RAM).
 - LLM : modèle ≤ 3-4 Mds de paramètres, quantifié (Int8), ≈ 3-4 Go RAM.
-- Recommandé : 8 threads CPU max, pas de GPU requis.
+- Recommandé : 4-8 threads CPU, pas de GPU requis.
+- Image Docker multi-stage (~500 Mo), santé via `/health`.
 
 ### 8. Sécurité
 
 - Token API Zammad et secret webhook en variables d'environnement (jamais en clair).
-- Validation de l'origine des requêtes (secret webhook).
-- Rate limiting sur l'endpoint public.
+- Validation de l'origine des requêtes (HMAC `X-Hub-Signature` et/ou bearer token).
+- Rate limiting sur l'endpoint public : à implémenter (voir `ROADMAP.md`, phase 3).
 
+---
 
+# Zammad-Auto-Transcription (English)
+
+## Purpose
+This project aims to create a simple transcription engine receiving Zammad webhooks to transcribe voice messages received by phone. The file is a "voicemail" sent by our 3CX instance and received in a ticket.
+
+Once transcribed, a local LLM writes a ticket title and the program pushes updates back to Zammad:
+- Title,
+- Client (if already known),
+- Transcribed text from the voicemail.
+
+The whole system is designed to run in a Docker container (CPU only).
+
+## Protocol
+
+### 1. Overview
+
+Full flow:
+
+1. 3CX deposits a voicemail in a Zammad ticket.
+2. Zammad triggers an HTTP POST webhook to the transcription server.
+3. The server downloads the audio file from the ticket.
+4. The transcription engine (local Whisper, CPU) converts audio to text.
+5. A local LLM writes a ticket title and identifies the client name.
+6. The program updates the Zammad ticket via REST API (title, client, transcribed text).
+7. The server responds to the webhook (`202 Accepted`).
+
+### 2. Components and Stack
+
+| Component | Role | Technology |
+|-----------|------|------------|
+| Webhook server | Receives Zammad webhooks | Python + FastAPI/uvicorn |
+| Transcription engine | Local CPU audio transcription | faster-whisper (`base`/`small` models) |
+| Local LLM | Title + client name extraction | Ollama (e.g. `llama3.2`, `qwen2.5`) |
+| Zammad API client | Read/write tickets | Zammad REST API + token (`Token token=…`) |
+| Orchestration | Containerization, CI/CD | Docker, Docker Compose, GitHub Actions |
+
+### 3. Input Data (Zammad Webhook)
+
+JSON payload containing:
+
+- `ticket.id`, `ticket.number`, `ticket.title`
+- `article.body`: empty string or associated text
+- `article.attachments`: `filename`, URL or path to audio
+
+Rules:
+
+- Fetch audio attachment via Zammad API (Bearer token).
+- Accept common 3CX formats: `.mp3`, `.wav`, `.ogg`, `.m4a`.
+
+### 4. Processing Pipeline
+
+1. **Reception**: `POST /webhook/zammad`, optional webhook secret validation (HMAC + bearer).
+2. **Download**: GET attachment via Zammad API.
+3. **Preprocessing**: `ffmpeg` conversion if needed (mono, 16 kHz).
+4. **Transcription**: faster-whisper, sentence segmentation.
+5. **Post-processing**: cleaning (phone numbers, addresses, timestamps).
+6. **Generation**: structured prompt to local LLM → title (≤ 80 chars) + client name if identifiable.
+7. **Zammad Update**: PUT title + POST transcription article + `customer_id` update (taken from ticket if present; LLM-extracted name not yet used to create/lookup client).
+
+### 5. Zammad Update (Output)
+
+- `PUT /api/v1/tickets/{id}`: update `title` and `customer_id`.
+- `POST /api/v1/tickets/{id}/articles`: body = voicemail transcription (type `note`).
+
+### 6. Errors and Idempotency
+
+- Respond immediately `202 Accepted` to webhook, then process ticket in background (FastAPI `BackgroundTasks`).
+- On pipeline failure, internal retries (3 attempts, backoff 10s/30s/60s); after exhaustion, error is logged and webhook has already responded.
+- Idempotency: a state file per ticket/article pair (`app/_data/state/<ticket>_<article>.json`) prevents double transcription on webhook redelivery.
+
+### 7. Docker Constraints (CPU only)
+
+- Transcription: `base`/`small` model (≈ 1-2 GB RAM).
+- LLM: ≤ 3-4B parameter model, quantized (Int8), ≈ 3-4 GB RAM.
+- Recommended: 4-8 CPU threads, no GPU required.
+- Multi-stage Docker image (~500 MB), health check via `/health`.
+
+### 8. Security
+
+- Zammad API token and webhook secret in environment variables (never in plaintext).
+- Request origin validation (HMAC `X-Hub-Signature` and/or bearer token).
+- Rate limiting on public endpoint: to be implemented (see `ROADMAP.md`, phase 3).

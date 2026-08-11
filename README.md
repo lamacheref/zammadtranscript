@@ -1,38 +1,39 @@
 # Zammad-Auto-Transcription
 
 Moteur de transcription automatique des messages vocaux reçus dans les tickets
-Zammad (appels 3CX), avec rédaction du titre et identification du client par un
-LLM local — conçu pour fonctionner sur un petit LXC CPU only.
+Zammad (appels 3CX), avec rédaction du titre et extraction du nom du client par un
+LLM local (Ollama) — conçu pour fonctionner en conteneur Docker (CPU only).
 
 ## Fonctionnalités
 
 - Réception des webhooks Zammad (`POST /webhook/zammad`)
 - Récupération de l'attachment audio depuis le ticket
-- Transcription locale via faster-whisper (CPU)
-- Rédaction d'un titre et extraction du client via un LLM local (Ollama)
-- Mise à jour automatique du ticket Zammad (titre, client, texte transcrit)
+- Transcription locale via faster-whisper (CPU, `int8`)
+- Rédaction d'un titre et extraction du nom du client via un LLM local (Ollama)
+- Mise à jour automatique du ticket Zammad (titre, `customer_id`, article de transcription)
+- Idempotence (anti double-transcription) et retries intégrées
 
-## Démarrage rapide
-
-### Prérequis
-
-- Python ≥ 3.12
-- `ffmpeg` disponible dans le PATH
-- Une instance Zammad (API + token)
-- Ollama avec un modèle local (ex. `llama3.2`)
-
-### Installation et lancement
+## Démarrage rapide (Docker)
 
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-cp .env.example .env   # puis renseigner ZAMMAD_URL / ZAMMAD_TOKEN / WEBHOOK_SECRET
-.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+git clone https://github.com/lamacheref/zammadtranscript.git
+cd zammadtranscript
+cp .env.example .env   # renseigner ZAMMAD_URL, ZAMMAD_TOKEN, WEBHOOK_SECRET
+docker compose up -d
 ```
 
 L'endpoint webhook est `POST /webhook/zammad` (à configurer dans Zammad comme
 trigger, voir `documentations/zammad-webhook.md`). Statut de l'application :
 `GET /health`.
+
+### Déploiement manuel (Python)
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+cp .env.example .env
+.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
 
 ### Tests
 
@@ -46,9 +47,26 @@ trigger, voir `documentations/zammad-webhook.md`). Statut de l'application :
 2. La signature HMAC (`X-Hub-Signature`) est vérifiée si `WEBHOOK_SECRET` est défini.
 3. L'audio est téléchargé via l'API Zammad, normalisé (ffmpeg mono 16 kHz) puis
    transcrit avec faster-whisper.
-4. Le texte est nettoyé, un titre et le nom du client sont générés par Ollama.
-5. Le ticket est mis à jour (titre, `customer_id`) et un article de transcription est ajouté.
+4. Le texte est nettoyé, un titre et le nom du client présumé sont générés par Ollama.
+5. Le ticket est mis à jour (titre, `customer_id` si déjà connu du ticket) et un article de transcription est ajouté.
 6. Idempotence : un état par ticket/article évite les doubles transcriptions.
+
+## Configuration
+
+Variables d'environnement (`.env`) :
+
+| Variable | Description | Défaut |
+|----------|-------------|--------|
+| `ZAMMAD_URL` | URL de l'API Zammad | `http://localhost:8080` |
+| `ZAMMAD_TOKEN` | Token API Zammad (Bearer) | — |
+| `WEBHOOK_SECRET` | Secret HMAC pour validation webhook | (optionnel) |
+| `WHISPER_MODEL` | Modèle faster-whisper (`base`, `small`, etc.) | `base` |
+| `WHISPER_DEVICE` | Device (`cpu` ou `cuda`) | `cpu` |
+| `WHISPER_COMPUTE_TYPE` | Type de calcul (`int8`, `float16`, etc.) | `int8` |
+| `WHISPER_CPU_THREADS` | Threads CPU pour Whisper | `8` |
+| `OLLAMA_URL` | URL du serveur Ollama | `http://localhost:11434` |
+| `OLLAMA_MODEL` | Modèle LLM (ex: `llama3.2`, `qwen2.5`) | `llama3.2` |
+| `HOST` / `PORT` | Bind du serveur FastAPI | `0.0.0.0:8000` |
 
 ## Documentation
 
@@ -57,3 +75,82 @@ trigger, voir `documentations/zammad-webhook.md`). Statut de l'application :
 - `ROADMAP.md` : feuille de route
 - `CHANGELOG.md` : historique des modifications
 - `documentations/` : spécifications webhook Zammad et configuration 3CX
+
+---
+
+# Zammad-Auto-Transcription (English)
+
+Automatic transcription engine for voice messages received in Zammad tickets
+(3CX calls), with ticket title generation and client name extraction via a
+local LLM (Ollama) — designed to run in a Docker container (CPU only).
+
+## Features
+
+- Receives Zammad webhooks (`POST /webhook/zammad`)
+- Downloads audio attachment from the ticket
+- Local transcription via faster-whisper (CPU, `int8`)
+- Title generation and client name extraction via local LLM (Ollama)
+- Automatic Zammad ticket update (title, `customer_id`, transcription article)
+- Idempotency (anti double-transcription) and built-in retries
+
+## Quick Start (Docker)
+
+```bash
+git clone https://github.com/lamacheref/zammadtranscript.git
+cd zammadtranscript
+cp .env.example .env   # fill in ZAMMAD_URL, ZAMMAD_TOKEN, WEBHOOK_SECRET
+docker compose up -d
+```
+
+The webhook endpoint is `POST /webhook/zammad` (configure in Zammad as a
+trigger, see `documentations/zammad-webhook.md`). Health check: `GET /health`.
+
+### Manual Deployment (Python)
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+cp .env.example .env
+.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+### Tests
+
+```bash
+.venv/bin/python -m pytest tests/
+```
+
+## How It Works
+
+1. Zammad sends the webhook (JSON payload `ticket` + `article` with audio attachment).
+2. HMAC signature (`X-Hub-Signature`) is verified if `WEBHOOK_SECRET` is set.
+3. Audio is downloaded via Zammad API, normalized (ffmpeg mono 16 kHz) then
+   transcribed with faster-whisper.
+4. Text is cleaned, a title and presumed client name are generated by Ollama.
+5. Ticket is updated (title, `customer_id` if already known on the ticket) and a transcription article is added.
+6. Idempotency: a state file per ticket/article prevents double transcription.
+
+## Configuration
+
+Environment variables (`.env`):
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ZAMMAD_URL` | Zammad API URL | `http://localhost:8080` |
+| `ZAMMAD_TOKEN` | Zammad API token (Bearer) | — |
+| `WEBHOOK_SECRET` | HMAC secret for webhook validation | (optional) |
+| `WHISPER_MODEL` | faster-whisper model (`base`, `small`, etc.) | `base` |
+| `WHISPER_DEVICE` | Device (`cpu` or `cuda`) | `cpu` |
+| `WHISPER_COMPUTE_TYPE` | Compute type (`int8`, `float16`, etc.) | `int8` |
+| `WHISPER_CPU_THREADS` | CPU threads for Whisper | `8` |
+| `OLLAMA_URL` | Ollama server URL | `http://localhost:11434` |
+| `OLLAMA_MODEL` | LLM model (e.g. `llama3.2`, `qwen2.5`) | `llama3.2` |
+| `HOST` / `PORT` | FastAPI server bind | `0.0.0.0:8000` |
+
+## Documentation
+
+- `PROJET.md` : project description and technical protocol (French)
+- `TODO.md` : tasks to do
+- `ROADMAP.md` : roadmap
+- `CHANGELOG.md` : changelog
+- `documentations/` : Zammad webhook specs and 3CX configuration

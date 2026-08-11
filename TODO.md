@@ -18,57 +18,70 @@ Liste des tâches à réaliser pour le projet Zammad-Auto-Transcription.
 - [x] Client API Zammad (téléchargement des attachments, lecture de ticket)
 - [x] Intégration faster-whisper (modèle `base`/`small`, pré-traitement ffmpeg mono 16 kHz)
 - [x] Post-traitement du texte (nettoyage numéros/adresses/timestamps)
-- [x] Intégration Ollama pour le titre et l'extraction du client
+- [x] Intégration Ollama pour le titre et l'extraction du nom du client
 - [x] Mise à jour Zammad : titre, client (`customer_id`), article de transcription
 - [x] Idempotence + gestion des erreurs et retries
+- [x] Tests pytest (`tests/`) : pipeline, idempotence, retries, validation webhook/signature
 
-## Installation automatique du LXC (community-scripts)
+## Docker & CI/CD
 
-> Basée sur le guide officiel :
-> https://community-scripts.org/docs/contribution/templates_install/appname-install
-
-### Préparation
-
-- [ ] Forker/cloner le dépôt `community-scripts/ProxmoxVED`
-  (ou utiliser le dossier `ProxmoxVED` : `ct/`, `install/`, metadata) dans ce projet
-- [ ] Partir d'un script d'installation existant :
-      `cp install/example-install.sh install/zammad-autotranscription-install.sh`
-
-### Script d'installation (`install/zammad-autotranscription-install.sh`)
-
-- [ ] En-tête conforme (copyright, `Author`, `License`, `Source`)
-- [ ] `source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"` + `color`, `verb_ip6`,
-      `catch_errors`, `setting_up_container`, `network_check`, `update_os`
-- [ ] Variables `var_*` avec guarded `read` (lisibles depuis les champs du site) :
-      token API Zammad, URL Zammad, port du serveur, clé du LLM local, etc.
-- [ ] Dependencies app-spécifiques uniquement (aucun doublon des paquets de base)
-- [ ] Runtime via `tools.func` (`setup_uv` avec Python 3.12, etc.)
-- [ ] Déploiement de l'application (clone du dépôt + fichiers)
-- [ ] Configuration via heredoc unique (`.env` : `ZAMMAD_URL`, `ZAMMAD_TOKEN`,
-      `WEBHOOK_SECRET`, modèle Whisper/LLM, port)
-- [ ] Génération des secrets avec `openssl` (alphanumérique) + `chown`/`chmod` minimaux
-- [ ] Service systemd (`after=network.target`, `Restart=on-failure`) activé au boot
-- [ ] Finalisation : `motd_ssh`, `customize`, `cleanup_lxc`
-
-### Script CT (`ct/zammad-autotranscription.sh`)
-
-- [ ] Script conteneur conforme au modèle CT de community-scripts
-- [ ] `export var_*` vers le conteneur (alignés avec l'install script)
-- [ ] `FUNCTIONS_FILE_PATH` fourni à l'install script (jamais de curl vers `.func`)
-- [ ] `update_script()` : gestion des mises à jour de l'application
-
-### Métadonnées (site community-scripts)
-
-- [ ] Déclaration `app_vars` (champs affichés sur le site + valeurs transmises)
-- [ ] `install_method` associé (metadata + PocketBase)
-
-### Tests
-
-- [ ] Test local : `bash ct/zammad-autotranscription.sh` (zéro config)
-- [ ] Test après push : `bash -c "$(curl -fsSL <url-raw>/ct/zammad-autotranscription.sh)"`
-- [ ] Vérifier contraintes LXC CPU only (RAM, threads, pas de GPU)
+- [x] Multi-stage Dockerfile (builder + runtime, Python 3.12, ffmpeg, dépendances)
+- [x] Docker Compose (app + Ollama, volumes, healthchecks, restart policy)
+- [x] GitHub Actions CI/CD : test → build/push GHCR → deploy staging
+- [x] `.dockerignore` + sécurité (non-root user, read-only fs où possible)
 
 ## Divers
 
+- [ ] Rate limiting sur l'endpoint public (`POST /webhook/zammad`)
+- [ ] Utiliser le nom du client extrait par le LLM pour créer/rechercher le client Zammad
+      (actuellement seuls le titre et l'article sont appliqués ; `customer_id` repris du payload)
+- [ ] Logging structuré (JSON) + métriques Prometheus (optionnel)
+- [ ] Support multi-langues (détection langue Whisper)
+- [ ] Couverture de tests > 80%
+- [ ] Automatisation mise à jour dépendances (Dependabot/Renovate)
 - [ ] Lint/validation du code (ruff ou équivalent)
-- [ ] README : instructions d'installation LXC via communauté scripts
+
+---
+
+# TODO (English)
+
+Task list for the Zammad-Auto-Transcription project.
+
+## Documentation
+
+- [x] Write `PROJET.md` (purpose + technical protocol)
+- [x] Create `README.md`, `CHANGELOG.md`, `ROADMAP.md`
+- [x] Document Zammad webhook configuration (events, URL, secret)
+      → `documentations/zammad-webhook.md`
+- [x] Document 3CX configuration (voice message format/delivery)
+      → `documentations/3cx_envoi_message.md`
+
+## Prototype
+
+- [x] Initialize Python project (FastAPI + uvicorn)
+- [x] `POST /webhook/zammad` endpoint with secret validation
+- [x] Zammad API client (attachment download, ticket reading)
+- [x] faster-whisper integration (`base`/`small` model, ffmpeg mono 16 kHz preprocessing)
+- [x] Text post-processing (phone numbers, addresses, timestamps cleanup)
+- [x] Ollama integration for title and client name extraction
+- [x] Zammad update: title, client (`customer_id`), transcription article
+- [x] Idempotency + error handling and retries
+- [x] Pytest tests (`tests/`): pipeline, idempotency, retries, webhook/signature validation
+
+## Docker & CI/CD
+
+- [x] Multi-stage Dockerfile (builder + runtime, Python 3.12, ffmpeg, dependencies)
+- [x] Docker Compose (app + Ollama, volumes, healthchecks, restart policy)
+- [x] GitHub Actions CI/CD: test → build/push GHCR → deploy staging
+- [x] `.dockerignore` + security (non-root user, read-only fs where possible)
+
+## Misc
+
+- [ ] Rate limiting on public endpoint (`POST /webhook/zammad`)
+- [ ] Use LLM-extracted client name to create/lookup Zammad customer
+      (currently only title and article are applied; `customer_id` taken from payload)
+- [ ] Structured logging (JSON) + Prometheus metrics (optional)
+- [ ] Multi-language support (Whisper language detection)
+- [ ] Test coverage > 80%
+- [ ] Dependency update automation (Dependabot/Renovate)
+- [ ] Code linting/validation (ruff or equivalent)
