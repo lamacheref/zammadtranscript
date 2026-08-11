@@ -46,3 +46,7 @@ class ProcessingResult(BaseModel):
     transcript: str | None = None
     title: str | None = None
     customer_id: int | None = None
+
+
+class TranscribeRequest(BaseModel):
+    ticket_id: int

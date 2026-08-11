@@ -33,9 +33,9 @@ Liste des tâches à réaliser pour le projet Zammad-Auto-Transcription.
 ## Divers
 
 - [x] File d'attente asynchrone (Redis + RQ) : webhook enqueue → worker traite
-- [ ] Interface web manuelle : saisie n° ticket → récupération audio → transcription → MAJ ticket
-- [ ] Utiliser le nom du client extrait par le LLM pour créer/rechercher le client Zammad
-      (actuellement seuls le titre et l'article sont appliqués ; `customer_id` repris du payload)
+- [x] Interface web manuelle : saisie n° ticket → récupération audio → transcription → MAJ ticket
+- [x] Utiliser le nom du client extrait par le LLM pour créer/rechercher le client Zammad
+      (recherche par nom, création si absent, fallback sur customer_id du payload)
 - [ ] Logging structuré (JSON) + métriques Prometheus (optionnel)
 - [ ] Support multi-langues (détection langue Whisper)
 - [ ] Couverture de tests > 80%
@@ -79,9 +79,9 @@ Task list for the Zammad-Auto-Transcription project.
 ## Misc
 
 - [x] Async queue (Redis + RQ): webhook enqueues → worker processes
-- [ ] Manual web UI: enter ticket number → fetch audio → transcribe → update ticket
-- [ ] Use LLM-extracted client name to create/lookup Zammad customer
-      (currently only title and article are applied; `customer_id` taken from payload)
+- [x] Manual web UI: enter ticket number → fetch audio → transcribe → update ticket
+- [x] Use LLM-extracted client name to create/lookup Zammad customer
+      (search by name, create if missing, fallback to payload customer_id)
 - [ ] Structured logging (JSON) + Prometheus metrics (optional)
 - [ ] Multi-language support (Whisper language detection)
 - [ ] Test coverage > 80%

@@ -92,6 +92,23 @@ class Processor:
         customer = payload.ticket.customer or {}
         if customer.get("id"):
             return customer["id"]
+
+        if llm_name:
+            user = self.zammad.find_user_by_name(llm_name)
+            if user and user.get("id"):
+                logger.info("Client trouvé dans Zammad : %s (ID: %s)", llm_name, user["id"])
+                return user["id"]
+
+            try:
+                parts = llm_name.split(" ", 1)
+                firstname = parts[0]
+                lastname = parts[1] if len(parts) > 1 else ""
+                new_user = self.zammad.create_user(firstname, lastname)
+                logger.info("Client créé dans Zammad : %s (ID: %s)", llm_name, new_user.get("id"))
+                return new_user.get("id")
+            except Exception as exc:
+                logger.warning("Échec création client Zammad pour '%s' : %s", llm_name, exc)
+
         return None
 
     def _find_audio_attachment(self, payload: WebhookPayload):

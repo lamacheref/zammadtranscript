@@ -30,8 +30,8 @@
 
 ## Phase 5 — Améliorations
 
-- [ ] Utiliser le nom client extrait par le LLM pour créer/rechercher le client Zammad
-- [ ] Interface web manuelle : saisie n° ticket → récupération audio → transcription → MAJ ticket
+- [x] Utiliser le nom client extrait par le LLM pour créer/rechercher le client Zammad
+- [x] Interface web manuelle : saisie n° ticket → récupération audio → transcription → MAJ ticket
 - [ ] Logging structuré (JSON) + observabilité (métriques Prometheus optionnelles)
 - [ ] Support multi-langues (détection langue Whisper)
 - [ ] Couverture tests unitaires/intégration > 80%
@@ -71,8 +71,8 @@
 
 ## Phase 5 — Enhancements
 
-- [ ] Use LLM-extracted client name to create/lookup Zammad customer
-- [ ] Manual web UI: enter ticket number → fetch audio → transcribe → update ticket
+- [x] Use LLM-extracted client name to create/lookup Zammad customer
+- [x] Manual web UI: enter ticket number → fetch audio → transcribe → update ticket
 - [ ] Structured logging (JSON) + observability (Prometheus metrics optional)
 - [ ] Multi-language support (Whisper language detection)
 - [ ] Unit/integration test coverage > 80%

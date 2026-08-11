@@ -1,12 +1,15 @@
 import hashlib
 import hmac
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 from .config import Settings, get_settings
-from .models import WebhookPayload
+from .models import WebhookPayload, TranscribeRequest
 from .queue import enqueue_transcription
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -14,7 +17,11 @@ logger = logging.getLogger("zammad-autotranscription")
 
 settings: Settings = get_settings()
 
+BASE_DIR = Path(__file__).parent
 app = FastAPI(title="Zammad Auto Transcription", version="0.1.0")
+
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
 def valid_signature(body: bytes, signature: str) -> bool:
@@ -48,6 +55,65 @@ def authorize(request: Request, authorization: str | None) -> None:
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/ui", response_class=HTMLResponse)
+async def ui_index(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
+
+
+@app.post("/ui/transcribe")
+async def ui_transcribe(request: Request, payload: TranscribeRequest) -> JSONResponse:
+    from .processor import Processor
+
+    processor = Processor(settings)
+
+    try:
+        ticket = processor.zammad.get_ticket(payload.ticket_id)
+    except Exception as exc:
+        logger.exception("Erreur récupération ticket %s : %s", payload.ticket_id, exc)
+        raise HTTPException(status_code=404, detail=f"Ticket {payload.ticket_id} introuvable")
+
+    articles = processor.zammad.get_ticket_articles(payload.ticket_id) if hasattr(processor.zammad, 'get_ticket_articles') else []
+    if not articles:
+        try:
+            articles = processor.zammad.get_ticket_articles(payload.ticket_id)
+        except Exception:
+            pass
+
+    audio_attachment = None
+    if articles:
+        for article in articles:
+            for att in article.get("attachments", []):
+                filename = (att.get("filename") or "").lower()
+                if filename.endswith((".mp3", ".wav", ".ogg", ".m4a")):
+                    audio_attachment = att
+                    break
+            if audio_attachment:
+                break
+
+    if not audio_attachment:
+        raise HTTPException(status_code=422, detail="Aucun attachment audio trouvé dans le ticket")
+
+    job_id = enqueue_transcription({
+        "ticket": {
+            "id": ticket.get("id"),
+            "number": ticket.get("number"),
+            "title": ticket.get("title"),
+            "customer_id": ticket.get("customer_id"),
+            "customer": ticket.get("customer"),
+        },
+        "article": {
+            "id": audio_attachment.get("id"),
+            "ticket_id": payload.ticket_id,
+            "type": "note",
+            "attachments": [audio_attachment],
+        }
+    })
+
+    logger.info("Transcription manuelle ticket %s enfile (job %s)", payload.ticket_id, job_id)
+
+    return JSONResponse(status_code=202, content={"status": "accepted", "ticket_id": payload.ticket_id, "job_id": job_id})
 
 
 @app.post("/webhook/zammad")

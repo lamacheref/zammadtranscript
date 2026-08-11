@@ -30,11 +30,32 @@ class ZammadClient:
     def get_article(self, ticket_id: int, article_id: int) -> dict:
         return self._get(f"/api/v1/tickets/{ticket_id}/articles/{article_id}")
 
+    def get_ticket_articles(self, ticket_id: int) -> list:
+        return self._get(f"/api/v1/tickets/{ticket_id}/articles")
+
     def update_ticket(self, ticket_id: int, payload: dict) -> dict:
         return self._put(f"/api/v1/tickets/{ticket_id}", payload)
 
     def create_article(self, ticket_id: int, payload: dict) -> dict:
         return self._post(f"/api/v1/tickets/{ticket_id}/articles", payload)
+
+    def find_user_by_name(self, name: str) -> dict | None:
+        try:
+            result = self._get(f"/api/v1/users/search?query={name}")
+            users = result if isinstance(result, list) else result.get("users", [])
+            for user in users:
+                fullname = f"{user.get('firstname', '')} {user.get('lastname', '')}".strip()
+                if fullname.lower() == name.lower() or user.get('email', '').lower() == name.lower():
+                    return user
+            return None
+        except ZammadError:
+            return None
+
+    def create_user(self, firstname: str, lastname: str, email: str | None = None) -> dict:
+        payload = {"firstname": firstname, "lastname": lastname}
+        if email:
+            payload["email"] = email
+        return self._post("/api/v1/users", payload)
 
     def _get(self, path: str) -> dict:
         return self._request("GET", path)

@@ -45,6 +45,11 @@ Toutes les modifications notables de ce projet sont documentées dans ce fichier
 - `config.py` : `redis_url`, `rq_queue_name`
 - Tests mis à jour : mock `enqueue_transcription` au lieu de `processor.process`
 
+### Client Zammad via LLM (lookup/création)
+- `app/zammad.py` : `find_user_by_name()`, `create_user()` pour recherche/création utilisateur
+- `app/processor.py` : `_resolve_customer()` utilise `customer_name` du LLM pour trouver/créer le client
+- Fallback sur `customer_id` du payload si pas de nom LLM ou échec
+
 ---
 
 # Changelog (English)
@@ -76,7 +81,10 @@ All notable changes to this project are documented in this file.
   idempotency via state file, and actual `customer_id` behavior
 - `README.md`: aligned operation (title/`customer_id`/article, client name)
 
-### Async Architecture (Redis Queue + RQ)
+### Zammad Client via LLM (lookup/create)
+- `app/zammad.py`: `find_user_by_name()`, `create_user()` for user lookup/creation
+- `app/processor.py`: `_resolve_customer()` uses LLM `customer_name` to find/create client
+- Fallback to payload `customer_id` if no LLM name or failure
 - `app/queue.py`: RQ queue, `process_transcription_job` job function, `enqueue_transcription`
 - `app/worker.py`: RQ worker entry point (`python -m app.worker`)
 - `app/main.py`: webhook enqueues instead of `BackgroundTasks`, `202` response with `job_id`
