@@ -20,11 +20,23 @@ logger = logging.getLogger(__name__)
 
 # Indicatifs français valides (métropole + DOM/TOM)
 _FR_PREFIXES = (
-    "1", "2", "3", "4", "5",  # métropole
-    "6", "7",                 # mobile
-    "9",                      # VOIP / numéros spéciaux
-    "590", "594", "596", "262", "269", "681", "689",  # DOM/TOM
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",  # métropole
+    "6",
+    "7",  # mobile
+    "9",  # VOIP / numéros spéciaux
+    "590",
+    "594",
+    "596",
+    "262",
+    "269",
+    "681",
+    "689",  # DOM/TOM
 )
+
 
 def _normalize_french_phone(raw: str) -> str | None:
     """
@@ -84,7 +96,7 @@ def _phone_variants(phone: str) -> set[str]:
         local = "0" + norm[3:]
         variants.add(local)
         # Format avec espaces (0X XX XX XX XX)
-        variants.add(" ".join([local[i:i+2] for i in range(0, 10, 2)]))
+        variants.add(" ".join([local[i : i + 2] for i in range(0, 10, 2)]))
         # Format compact sans +
         variants.add(norm[1:])  # 33XXXXXXXXX
 
@@ -209,13 +221,19 @@ class Processor:
             for variant in _phone_variants(phone):
                 user = self.zammad.find_user_by_phone(variant)
                 if user and user.get("id"):
-                    logger.info("Client trouvé via téléphone %s (variante %s) : %s (ID: %s)",
-                                phone, variant,
-                                f"{user.get('firstname', '')} {user.get('lastname', '')}".strip(),
-                                user["id"])
+                    logger.info(
+                        "Client trouvé via téléphone %s (variante %s) : %s (ID: %s)",
+                        phone,
+                        variant,
+                        f"{user.get('firstname', '')} {user.get('lastname', '')}".strip(),
+                        user["id"],
+                    )
                     return user["id"]
-            logger.info("Aucun client trouvé pour le téléphone %s (variantes testées: %s)",
-                        phone, _phone_variants(phone))
+            logger.info(
+                "Aucun client trouvé pour le téléphone %s (variantes testées: %s)",
+                phone,
+                _phone_variants(phone),
+            )
 
         if llm_name:
             user = self.zammad.find_user_by_name(llm_name)
