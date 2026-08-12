@@ -93,6 +93,10 @@ def test_get_ticket_articles(mock_request):
     client = make_client()
     mock_request.return_value = FakeResponse([{"id": 1}])
     assert client.get_ticket_articles(81) == [{"id": 1}]
+    # endpoint Zammad correct : /api/v1/ticket_articles/by_ticket/<id>
+    assert mock_request.call_args.args[1] == (
+        "http://zammad.example.com/api/v1/ticket_articles/by_ticket/81"
+    )
 
 
 @patch("app.zammad.httpx.request")

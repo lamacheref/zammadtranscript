@@ -31,7 +31,8 @@ class ZammadClient:
         return self._get(f"/api/v1/tickets/{ticket_id}/articles/{article_id}")
 
     def get_ticket_articles(self, ticket_id: int) -> list:
-        return self._get(f"/api/v1/tickets/{ticket_id}/articles")
+        # Endpoint Zammad : GET /api/v1/ticket_articles/by_ticket/{ticket_id}
+        return self._get(f"/api/v1/ticket_articles/by_ticket/{ticket_id}")
 
     def update_ticket(self, ticket_id: int, payload: dict) -> dict:
         return self._put(f"/api/v1/tickets/{ticket_id}", payload)
