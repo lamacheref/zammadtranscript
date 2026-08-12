@@ -195,11 +195,10 @@ def test_ui_transcribe_no_audio():
 
 
 def test_ui_transcribe_ticket_not_found():
-    from fastapi import HTTPException
-
     with patch("app.processor.Processor") as mock_processor_cls:
         processor = mock_processor_cls.return_value
-        processor.zammad.get_ticket.side_effect = HTTPException(status_code=404)
+        processor.zammad.get_ticket.side_effect = Exception("404")
+        processor.zammad.find_ticket_by_number.return_value = None
         r = client.post("/ui/transcribe", json={"ticket_id": 999})
 
     assert r.status_code == 404
@@ -249,3 +248,54 @@ def test_ui_transcribe_success():
     assert data["customer_id"] == 42
     assert data["customer_name"] == "John Doe"
     assert data["ticket_url"].endswith("/#ticket/zoom/81")
+
+
+def test_ui_transcribe_resolves_ticket_by_number():
+    """L'utilisateur saisit le numéro (ex: 202608069400166) au lieu de l'ID interne."""
+    with (
+        patch("app.processor.Processor") as mock_processor_cls,
+        patch("app.main.enqueue_transcription", return_value="job-num"),
+        patch(
+            "app.main.wait_for_job",
+            return_value={
+                "title": "Résolu",
+                "transcript": "Texte",
+                "customer_id": 100,
+                "customer_name": "Client X",
+            },
+        ),
+    ):
+        processor = mock_processor_cls.return_value
+        # get_ticket par ID interne échoue (car l'utilisateur a donné le numéro)
+        processor.zammad.get_ticket.side_effect = Exception("404")
+        # find_ticket_by_number retrouve le ticket avec son ID interne
+        processor.zammad.find_ticket_by_number.return_value = {
+            "id": 6475,
+            "number": "202608069400166",
+            "title": "Nouveau message vocal",
+            "customer_id": 100,
+            "customer": {},
+        }
+        processor.zammad.get_ticket_articles.return_value = [
+            {
+                "attachments": [
+                    {
+                        "id": 174,
+                        "filename": "voicemail.mp3",
+                        "url": "http://zammad.example.com/dl/audio",
+                    }
+                ]
+            }
+        ]
+        r = client.post(
+            "/ui/transcribe",
+            json={"ticket_id": 202608069400166},
+        )
+
+    assert r.status_code == 200
+    data = r.json()
+    assert data["success"] is True
+    assert data["ticket_id"] == 6475
+    processor.zammad.find_ticket_by_number.assert_called_once_with("202608069400166")
+    # L'URL pointe vers l'ID interne
+    assert data["ticket_url"].endswith("/#ticket/zoom/6475")

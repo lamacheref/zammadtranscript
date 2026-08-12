@@ -152,6 +152,31 @@ def test_get_article(mock_request):
     assert client.get_article(81, 104) == {"id": 104}
 
 
+@patch("app.zammad.httpx.request")
+def test_find_ticket_by_number_found(mock_request):
+    client = make_client()
+    mock_request.return_value = FakeResponse(
+        {"tickets": [{"id": 6475, "number": "202608069400166"}]}
+    )
+    result = client.find_ticket_by_number("202608069400166")
+    assert result == {"id": 6475, "number": "202608069400166"}
+    # la requête doit contenir number:<numéro>
+    assert "number:202608069400166" in mock_request.call_args.args[1]
+
+
+@patch("app.zammad.httpx.request")
+def test_find_ticket_by_number_not_found(mock_request):
+    client = make_client()
+    mock_request.return_value = FakeResponse({"tickets": []})
+    assert client.find_ticket_by_number("999") is None
+
+
+@patch("app.zammad.httpx.request", side_effect=ZammadError("boom"))
+def test_find_ticket_by_number_error_returns_none(mock_request):
+    client = make_client()
+    assert client.find_ticket_by_number("999") is None
+
+
 def test_headers_include_token():
     client = make_client()
     headers = client._headers(accept_json=True)

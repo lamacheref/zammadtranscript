@@ -73,6 +73,18 @@ class ZammadClient:
             payload["email"] = email
         return self._post("/api/v1/users", payload)
 
+    def find_ticket_by_number(self, number: str) -> dict | None:
+        """Recherche un ticket par son numéro (champ 'number' de Zammad)."""
+        try:
+            # Zammad search endpoint for tickets
+            result = self._get(f"/api/v1/tickets/search?query=number:{number}")
+            tickets = result if isinstance(result, list) else result.get("tickets", [])
+            if tickets:
+                return tickets[0]
+            return None
+        except ZammadError:
+            return None
+
     def _get(self, path: str) -> dict:
         return self._request("GET", path)
 
