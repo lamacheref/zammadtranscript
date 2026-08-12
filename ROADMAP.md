@@ -73,7 +73,8 @@
 
 - [x] Use LLM-extracted client name to create/lookup Zammad customer
 - [x] Manual web UI: enter ticket number → fetch audio → transcribe → update ticket
-- [ ] Structured logging (JSON) + observability (Prometheus metrics optional)
+- [x] Restricted logging (centralized config, noisy loggers at WARNING, `LOG_LEVEL`)
+- [ ] Prometheus metrics (after first release)
 - [ ] Multi-language support (Whisper language detection)
 - [ ] Unit/integration test coverage > 80%
 - [ ] Dependency update automation (Dependabot/Renovate)

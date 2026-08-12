@@ -50,6 +50,12 @@ Toutes les modifications notables de ce projet sont documentées dans ce fichier
 - `app/processor.py` : `_resolve_customer()` utilise `customer_name` du LLM pour trouver/créer le client
 - Fallback sur `customer_id` du payload si pas de nom LLM ou échec
 
+### Logging restreint
+- `app/logging_config.py` : configuration centralisée du logging (format unique, idempotente)
+- Loggers bruyants (httpx, faster-whisper, etc.) réduits à `WARNING` par défaut
+- `app/main.py` / `app/worker.py` : utilisent `configure_logging()` au lieu de `logging.basicConfig` dupliqué
+- `config.py` + `.env.example` : nouveau réglage `LOG_LEVEL` (défaut `INFO`)
+
 ---
 
 # Changelog (English)
@@ -85,6 +91,12 @@ All notable changes to this project are documented in this file.
 - `app/zammad.py`: `find_user_by_name()`, `create_user()` for user lookup/creation
 - `app/processor.py`: `_resolve_customer()` uses LLM `customer_name` to find/create client
 - Fallback to payload `customer_id` if no LLM name or failure
+
+### Restricted logging
+- `app/logging_config.py`: centralized logging configuration (single format, idempotent)
+- Noisy loggers (httpx, faster-whisper, etc.) reduced to `WARNING` by default
+- `app/main.py` / `app/worker.py`: use `configure_logging()` instead of duplicated `logging.basicConfig`
+- `config.py` + `.env.example`: new `LOG_LEVEL` setting (default `INFO`)
 - `app/queue.py`: RQ queue, `process_transcription_job` job function, `enqueue_transcription`
 - `app/worker.py`: RQ worker entry point (`python -m app.worker`)
 - `app/main.py`: webhook enqueues instead of `BackgroundTasks`, `202` response with `job_id`

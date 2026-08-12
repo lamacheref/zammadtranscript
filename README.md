@@ -76,6 +76,7 @@ Variables d'environnement (`.env`) :
 | `OLLAMA_URL` | URL du serveur Ollama | `http://localhost:11434` |
 | `OLLAMA_MODEL` | Modèle LLM (ex: `llama3.2`, `qwen2.5`) | `llama3.2` |
 | `HOST` / `PORT` | Bind du serveur FastAPI | `0.0.0.0:8000` |
+| `LOG_LEVEL` | Niveau de logging (`DEBUG`, `INFO`, `WARNING`, `ERROR`) | `INFO` |
 
 ## Documentation
 
@@ -164,6 +165,7 @@ Environment variables (`.env`):
 | `OLLAMA_URL` | Ollama server URL | `http://localhost:11434` |
 | `OLLAMA_MODEL` | LLM model (e.g. `llama3.2`, `qwen2.5`) | `llama3.2` |
 | `HOST` / `PORT` | FastAPI server bind | `0.0.0.0:8000` |
+| `LOG_LEVEL` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) | `INFO` |
 
 ## Documentation
 

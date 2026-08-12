@@ -4,14 +4,15 @@ import sys
 from rq import Worker
 
 from .config import get_settings
+from .logging_config import configure_logging
 from .queue import get_redis_connection, get_queue
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger("zammad-autotranscription-worker")
 
 
 def main() -> None:
     settings = get_settings()
+    configure_logging(settings.log_level)
     conn = get_redis_connection(settings)
     queue = get_queue(settings)
 

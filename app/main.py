@@ -9,13 +9,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .config import Settings, get_settings
+from .logging_config import configure_logging
 from .models import WebhookPayload, TranscribeRequest
 from .queue import enqueue_transcription
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger("zammad-autotranscription")
 
 settings: Settings = get_settings()
+configure_logging(settings.log_level)
 
 BASE_DIR = Path(__file__).parent
 app = FastAPI(title="Zammad Auto Transcription", version="0.1.0")

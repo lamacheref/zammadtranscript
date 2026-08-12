@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
 
+    log_level: str = "INFO"
+
     redis_url: str = "redis://localhost:6379"
     rq_queue_name: str = "transcription"
 

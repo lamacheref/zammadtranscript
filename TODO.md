@@ -30,17 +30,29 @@ Liste des tâches à réaliser pour le projet Zammad-Auto-Transcription.
 - [x] GitHub Actions CI/CD : test → build/push GHCR → deploy staging
 - [x] `.dockerignore` + sécurité (non-root user, read-only fs où possible)
 
-## Divers
+## Fonctionnalités
 
 - [x] File d'attente asynchrone (Redis + RQ) : webhook enqueue → worker traite
 - [x] Interface web manuelle : saisie n° ticket → récupération audio → transcription → MAJ ticket
 - [x] Utiliser le nom du client extrait par le LLM pour créer/rechercher le client Zammad
       (recherche par nom, création si absent, fallback sur customer_id du payload)
-- [ ] Logging structuré (JSON) + métriques Prometheus (optionnel)
-- [ ] Support multi-langues (détection langue Whisper)
+- [x] Logging restreint (config centralisée, loggers bruyants réduits)
+
+## Tests
+
 - [ ] Couverture de tests > 80%
-- [ ] Automatisation mise à jour dépendances (Dependabot/Renovate)
 - [ ] Lint/validation du code (ruff ou équivalent)
+
+## Mises à jour
+
+- [ ] Automatisation mise à jour dépendances (Dependabot/Renovate)
+
+## v1.0.0
+
+À faire après la première release.
+
+- [ ] Métriques Prometheus
+- [ ] Support multi-langues (détection langue Whisper)
 
 ---
 
@@ -76,14 +88,26 @@ Task list for the Zammad-Auto-Transcription project.
 - [x] GitHub Actions CI/CD: test → build/push GHCR → deploy staging
 - [x] `.dockerignore` + security (non-root user, read-only fs where possible)
 
-## Misc
+## Features
 
 - [x] Async queue (Redis + RQ): webhook enqueues → worker processes
 - [x] Manual web UI: enter ticket number → fetch audio → transcribe → update ticket
 - [x] Use LLM-extracted client name to create/lookup Zammad customer
       (search by name, create if missing, fallback to payload customer_id)
-- [ ] Structured logging (JSON) + Prometheus metrics (optional)
-- [ ] Multi-language support (Whisper language detection)
+- [x] Restricted logging (centralized config, noisy loggers reduced)
+
+## Tests
+
 - [ ] Test coverage > 80%
-- [ ] Dependency update automation (Dependabot/Renovate)
 - [ ] Code linting/validation (ruff or equivalent)
+
+## Updates
+
+- [ ] Dependency update automation (Dependabot/Renovate)
+
+## v1.0.0
+
+To be done after the first release.
+
+- [ ] Prometheus metrics
+- [ ] Multi-language support (Whisper language detection)
