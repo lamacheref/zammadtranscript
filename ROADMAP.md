@@ -34,8 +34,8 @@
 - [x] Interface web manuelle : saisie n° ticket → récupération audio → transcription → MAJ ticket
 - [ ] Logging structuré (JSON) + observabilité (métriques Prometheus optionnelles)
 - [ ] Support multi-langues (détection langue Whisper)
-- [ ] Couverture tests unitaires/intégration > 80%
-- [ ] Automatisation mise à jour dépendances (Dependabot/Renovate)
+- [x] Couverture tests unitaires/intégration > 80%
+- [x] Automatisation mise à jour dépendances (Renovate)
 
 ---
 
@@ -76,5 +76,5 @@
 - [x] Restricted logging (centralized config, noisy loggers at WARNING, `LOG_LEVEL`)
 - [ ] Prometheus metrics (after first release)
 - [ ] Multi-language support (Whisper language detection)
-- [ ] Unit/integration test coverage > 80%
-- [ ] Dependency update automation (Dependabot/Renovate)
+- [x] Unit/integration test coverage > 80%
+- [x] Dependency update automation (Renovate)

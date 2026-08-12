@@ -40,12 +40,13 @@ Liste des tâches à réaliser pour le projet Zammad-Auto-Transcription.
 
 ## Tests
 
-- [ ] Couverture de tests > 80%
-- [ ] Lint/validation du code (ruff ou équivalent)
+- [x] Couverture de tests > 80% (dépassé, 97%)
+- [x] Lint/validation du code (ruff)
 
 ## Mises à jour
 
-- [ ] Automatisation mise à jour dépendances (Dependabot/Renovate)
+- [x] Automatisation mise à jour dépendances (Renovate)
+      → `renovate.json` + `documentations/renovate.md`
 
 ## v1.0.0
 
@@ -98,12 +99,13 @@ Task list for the Zammad-Auto-Transcription project.
 
 ## Tests
 
-- [ ] Test coverage > 80%
-- [ ] Code linting/validation (ruff or equivalent)
+- [x] Test coverage > 80% (exceeded, 97%)
+- [x] Code linting/validation (ruff)
 
 ## Updates
 
-- [ ] Dependency update automation (Dependabot/Renovate)
+- [x] Dependency update automation (Renovate)
+      → `renovate.json` + `documentations/renovate.md`
 
 ## v1.0.0
 

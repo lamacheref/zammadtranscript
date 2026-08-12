@@ -1,0 +1,46 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":timezone(Europe/Paris)",
+    ":dependencyDashboard",
+    ":semanticCommitScope(deps)",
+    ":semanticPrefixFixDepsChoreOthers"
+  ],
+  "description": "Automatisation des mises à jour de dépendances (pip, Docker, GitHub Actions).",
+  "labels": ["dependencies"],
+  "rebaseWhen": "behind-base-branch",
+  "schedule": ["before 6am on the first day of the week"],
+  "dockerfile": {
+    "enabled": true,
+    "pinDigests": false
+  },
+  "npm": {
+    "enabled": false
+  },
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security"]
+  },
+  "packageRules": [
+    {
+      "matchManagers": ["pip_requirements"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "groupName": "dependencies Python (mineur/patch)",
+      "groupSlug": "python-minor-patch",
+      "automerge": false
+    },
+    {
+      "matchManagers": ["dockerfile", "docker-compose"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "groupName": "images Docker (mineur/patch)",
+      "groupSlug": "docker-minor-patch",
+      "automerge": false
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "groupName": "GitHub Actions",
+      "groupSlug": "github-actions"
+    }
+  ]
+}

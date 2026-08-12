@@ -65,6 +65,18 @@ Toutes les modifications notables de ce projet sont documentées dans ce fichier
 - CI/CD : job `version` (commit + tag `vX.Y.Z`), image Docker taguée avec la version
 - Tests : `tests/test_bump_version.py`
 
+### Tests & qualité
+- Couverture de tests portée à 97 % (bug corrigé : `TemplateResponse(request, name, context)`)
+- `pyproject.toml` : configuration ruff (`E`, `F`, `W`, `I`, `UP`, `B`)
+- Lint + formatage ruff appliqués sur `app/`, `scripts/`, `tests/`
+- CI/CD : étape lint (`ruff check` + `format --check`) et tests avec couverture (`--cov-fail-under=80`)
+- `requirements.txt` : ajout de `ruff`, `pytest-cov`
+
+### Automatisation mises à jour de dépendances
+- `renovate.json` : configuration Renovate (pip, Docker/compose, GitHub Actions)
+- Planification hebdomadaire, regroupement `minor`/`patch` par manager, dashboard et alertes sécurité
+- `documentations/renovate.md` : installation GitHub (app hébergée) et Gitea (self-hosted)
+
 ---
 
 # Changelog (English)
@@ -115,6 +127,13 @@ All notable changes to this project are documented in this file.
 - `scripts/bump_version.py`: computes the next version number (fix = `f`, `feat:` = minor, major never automatic)
 - CI/CD: `version` job (commit + tag `vX.Y.Z`), Docker image tagged with the version
 - Tests: `tests/test_bump_version.py`
+
+### Tests & quality
+- Test coverage raised to 97% (bug fix: `TemplateResponse(request, name, context)`)
+- `pyproject.toml`: ruff configuration (`E`, `F`, `W`, `I`, `UP`, `B`)
+- ruff lint + format applied on `app/`, `scripts/`, `tests/`
+- CI/CD: lint step (`ruff check` + `format --check`) and tests with coverage (`--cov-fail-under=80`)
+- `requirements.txt`: added `ruff`, `pytest-cov`
 - `app/queue.py`: RQ queue, `process_transcription_job` job function, `enqueue_transcription`
 - `app/worker.py`: RQ worker entry point (`python -m app.worker`)
 - `app/main.py`: webhook enqueues instead of `BackgroundTasks`, `202` response with `job_id`
