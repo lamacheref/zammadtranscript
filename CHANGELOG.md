@@ -56,6 +56,9 @@ Toutes les modifications notables de ce projet sont documentées dans ce fichier
 - `app/main.py` / `app/worker.py` : utilisent `configure_logging()` au lieu de `logging.basicConfig` dupliqué
 - `config.py` + `.env.example` : nouveau réglage `LOG_LEVEL` (défaut `INFO`)
 
+### Correction
+- `requirements.txt` : ajout de `jinja2` (requis par `Jinja2Templates`, manquait en CI/Docker)
+
 ---
 
 # Changelog (English)
@@ -97,6 +100,9 @@ All notable changes to this project are documented in this file.
 - Noisy loggers (httpx, faster-whisper, etc.) reduced to `WARNING` by default
 - `app/main.py` / `app/worker.py`: use `configure_logging()` instead of duplicated `logging.basicConfig`
 - `config.py` + `.env.example`: new `LOG_LEVEL` setting (default `INFO`)
+
+### Fix
+- `requirements.txt`: added `jinja2` (required by `Jinja2Templates`, missing in CI/Docker)
 - `app/queue.py`: RQ queue, `process_transcription_job` job function, `enqueue_transcription`
 - `app/worker.py`: RQ worker entry point (`python -m app.worker`)
 - `app/main.py`: webhook enqueues instead of `BackgroundTasks`, `202` response with `job_id`
