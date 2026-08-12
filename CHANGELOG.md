@@ -77,6 +77,14 @@ Toutes les modifications notables de ce projet sont documentées dans ce fichier
 - Planification hebdomadaire, regroupement `minor`/`patch` par manager, dashboard et alertes sécurité
 - `documentations/renovate.md` : installation GitHub (app hébergée) et Gitea (self-hosted)
 
+### Résolution client par téléphone (optimisation 3CX)
+- `app/processor.py` : `_extract_phone_from_3cx_email()` extrait le pattern `De: +33...` du corps HTML 3CX
+- `_normalize_french_phone()` : normalisation robuste FR (local 0XXXXXXXXX ↔ international +33XXXXXXXXX, correction bug zéro en trop `+3302...` → `+332...`, nettoyage espaces/tirets/points)
+- `_phone_variants()` : génère toutes les variantes (E.164, local 0X XX XX XX XX, compact 33..., espaces) pour matcher quel que soit le format stocké dans Zammad
+- `app/zammad.py` : `find_user_by_phone()` recherche via `/api/v1/users/search?query=` sur champs `phone`, `mobile`, `fax`
+- `app/processor.py` : `_resolve_customer()` tente d'abord la recherche par téléphone (toutes variantes) → si trouvé, **skip LLM** pour le nom client → fallback LLM + création si échec
+- Indicateurs FR supportés : métropole (1-5, 6, 7, 9) + DOM/TOM (590, 594, 596, 262, 269, 681, 689)
+
 ---
 
 # Changelog (English)
@@ -148,3 +156,11 @@ All notable changes to this project are documented in this file.
 - GPL-3.0 license added
 - GitHub remote configured: `git@github.com:lamacheref/zammadtranscript.git`
 - Docs updated: removed LXC/community-scripts references, added English sections
+
+### Phone-based Client Resolution (3CX Optimization)
+- `app/processor.py`: `_extract_phone_from_3cx_email()` extracts `De: +33...` pattern from 3CX email HTML body
+- `_normalize_french_phone()`: robust FR normalization (local 0XXXXXXXXX ↔ international +33XXXXXXXXX, fixes extra-zero bug `+3302...` → `+332...`, strips spaces/dashes/dots)
+- `_phone_variants()`: generates all plausible variants (E.164, local 0X XX XX XX XX, compact 33..., spaced) to match whatever format is stored in Zammad
+- `app/zammad.py`: `find_user_by_phone()` searches via `/api/v1/users/search?query=` on `phone`, `mobile`, `fax` fields
+- `app/processor.py`: `_resolve_customer()` attempts phone lookup first (all variants) → if found, **skips LLM** for client name → fallback to LLM + creation on failure
+- Supported FR prefixes: metro (1-5, 6, 7, 9) + overseas (590, 594, 596, 262, 269, 681, 689)

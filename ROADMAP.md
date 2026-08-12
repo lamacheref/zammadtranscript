@@ -32,6 +32,7 @@
 
 - [x] Utiliser le nom client extrait par le LLM pour créer/rechercher le client Zammad
 - [x] Interface web manuelle : saisie n° ticket → récupération audio → transcription → MAJ ticket
+- [x] **Résolution client par téléphone 3CX** : extraction `De:` depuis l'email, normalisation FR robuste (local ↔ intl, correction zéro en trop), variantes de recherche, skip LLM si trouvé
 - [ ] Logging structuré (JSON) + observabilité (métriques Prometheus optionnelles)
 - [ ] Support multi-langues (détection langue Whisper)
 - [x] Couverture tests unitaires/intégration > 80%
@@ -73,8 +74,8 @@
 
 - [x] Use LLM-extracted client name to create/lookup Zammad customer
 - [x] Manual web UI: enter ticket number → fetch audio → transcribe → update ticket
-- [x] Restricted logging (centralized config, noisy loggers at WARNING, `LOG_LEVEL`)
-- [ ] Prometheus metrics (after first release)
+- [x] **Phone-based client resolution (3CX)**: extract `De:` from email, robust FR normalization (local ↔ intl, extra-zero fix), search variants, skip LLM if found
+- [ ] Structured logging (JSON) + observability (optional Prometheus metrics)
 - [ ] Multi-language support (Whisper language detection)
 - [x] Unit/integration test coverage > 80%
 - [x] Dependency update automation (Renovate)

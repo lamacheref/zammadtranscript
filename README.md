@@ -13,6 +13,7 @@ Architecture asynchrone : webhook → file d'attente Redis (RQ) → worker → M
 - Worker dédié : récupération audio → transcription → LLM → MAJ ticket
 - Transcription locale via faster-whisper (CPU, `int8`)
 - Rédaction d'un titre et extraction du nom du client via LLM local (Ollama)
+- **Résolution client par numéro de téléphone** : extraction du pattern `De: +33...` du corps email 3CX, normalisation FR (local ↔ international, correction zéro en trop), recherche Zammad par téléphone → skip LLM si trouvé
 - Mise à jour automatique du ticket Zammad (titre, `customer_id`, article de transcription)
 - Idempotence (anti double-transcription) et retries intégrées
 - Interface web manuelle (prévue) : saisie n° ticket → transcription à la demande
@@ -166,6 +167,7 @@ Async architecture: webhook → Redis queue (RQ) → worker → Zammad update.
 - Dedicated worker: fetch audio → transcribe → LLM → update ticket
 - Local transcription via faster-whisper (CPU, `int8`)
 - Title generation and client name extraction via local LLM (Ollama)
+- **Phone-based client resolution**: extracts `De: +33...` pattern from 3CX email body, normalizes French numbers (local ↔ international, fixes extra-zero bug), searches Zammad by phone → skips LLM if found
 - Automatic Zammad ticket update (title, `customer_id`, transcription article)
 - Idempotency (anti double-transcription) and built-in retries
 - Manual web UI (planned): enter ticket number → transcribe on demand

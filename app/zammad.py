@@ -54,6 +54,19 @@ class ZammadClient:
         except ZammadError:
             return None
 
+    def find_user_by_phone(self, phone: str) -> dict | None:
+        """Recherche un utilisateur Zammad par numéro de téléphone."""
+        try:
+            result = self._get(f"/api/v1/users/search?query={phone}")
+            users = result if isinstance(result, list) else result.get("users", [])
+            for user in users:
+                for field in ("phone", "mobile", "fax"):
+                    if user.get(field) and phone in user[field]:
+                        return user
+            return None
+        except ZammadError:
+            return None
+
     def create_user(self, firstname: str, lastname: str, email: str | None = None) -> dict:
         payload = {"firstname": firstname, "lastname": lastname}
         if email:
