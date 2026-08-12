@@ -47,15 +47,21 @@ class Processor:
                 logger.info("Ticket %s traité avec succès.", ticket_id)
                 return result
             except Exception as exc:
-                logger.error("Tentative %s/%s échouée pour le ticket %s : %s",
-                             attempt, MAX_RETRIES, ticket_id, exc)
+                logger.error(
+                    "Tentative %s/%s échouée pour le ticket %s : %s",
+                    attempt,
+                    MAX_RETRIES,
+                    ticket_id,
+                    exc,
+                )
                 if attempt == MAX_RETRIES:
                     self._mark_failed(ticket_id, article_id, str(exc))
                     raise
                 time.sleep(RETRY_BACKOFF[attempt - 1])
 
-    def _run_pipeline(self, ticket_id: int, article_id: int | None,
-                      payload: WebhookPayload, audio_url: str) -> dict:
+    def _run_pipeline(
+        self, ticket_id: int, article_id: int | None, payload: WebhookPayload, audio_url: str
+    ) -> dict:
         audio_bytes = self.zammad.get_attachment(audio_url)
         transcript = self.transcriber.transcribe(audio_bytes)
         transcript = clean_transcript(transcript)
@@ -65,10 +71,13 @@ class Processor:
         meta = self.titles.generate(transcript)
 
         customer_id = self._resolve_customer(payload, meta.get("customer_name"))
-        self.zammad.update_ticket(ticket_id, {
-            "title": meta["title"],
-            **({"customer_id": customer_id} if customer_id else {}),
-        })
+        self.zammad.update_ticket(
+            ticket_id,
+            {
+                "title": meta["title"],
+                **({"customer_id": customer_id} if customer_id else {}),
+            },
+        )
         article_payload = {
             "type": "note",
             "internal": False,
@@ -128,11 +137,14 @@ class Processor:
             return False, {}
 
     def _mark_done(self, ticket_id: int, article_id: int | None, data: dict) -> None:
-        self._write_state(ticket_id, article_id, {**data, "finished_at": time.time(), "success": True})
+        self._write_state(
+            ticket_id, article_id, {**data, "finished_at": time.time(), "success": True}
+        )
 
     def _mark_failed(self, ticket_id: int, article_id: int | None, error: str) -> None:
-        self._write_state(ticket_id, article_id,
-                          {"error": error, "finished_at": time.time(), "success": False})
+        self._write_state(
+            ticket_id, article_id, {"error": error, "finished_at": time.time(), "success": False}
+        )
 
     def _write_state(self, ticket_id: int, article_id: int | None, data: dict) -> None:
         self.state_dir.mkdir(parents=True, exist_ok=True)

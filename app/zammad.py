@@ -45,7 +45,10 @@ class ZammadClient:
             users = result if isinstance(result, list) else result.get("users", [])
             for user in users:
                 fullname = f"{user.get('firstname', '')} {user.get('lastname', '')}".strip()
-                if fullname.lower() == name.lower() or user.get('email', '').lower() == name.lower():
+                if (
+                    fullname.lower() == name.lower()
+                    or user.get("email", "").lower() == name.lower()
+                ):
                     return user
             return None
         except ZammadError:

@@ -9,10 +9,8 @@ import scripts.bump_version as bv
 
 @pytest.fixture
 def git_repo(tmp_path):
-    subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, check=True,
-                   capture_output=True)
-    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path,
-                   check=True)
+    subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path, check=True)
     subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, check=True)
 
     (tmp_path / "VERSION").write_text("1.2.3\n")
@@ -23,8 +21,7 @@ def git_repo(tmp_path):
 def commit(repo_path: Path, message: str, filename: str = "file.txt") -> None:
     (repo_path / filename).write_text(message)
     subprocess.run(["git", "add", "-A"], cwd=repo_path, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "-m", message], cwd=repo_path, check=True,
-                   capture_output=True)
+    subprocess.run(["git", "commit", "-m", message], cwd=repo_path, check=True, capture_output=True)
 
 
 def test_read_version_valid(git_repo):
@@ -85,7 +82,8 @@ def test_cli_prints_new_version(git_repo):
     commit(git_repo, "fix: another bug", filename="f2.txt")
     result = subprocess.run(
         [sys.executable, "scripts/bump_version.py", "--root", str(git_repo)],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert result.returncode == 0
     assert result.stdout.strip() == "1.2.4"
@@ -95,7 +93,8 @@ def test_cli_write_flag(git_repo):
     commit(git_repo, "feat: shiny", filename="f2.txt")
     result = subprocess.run(
         [sys.executable, "scripts/bump_version.py", "--root", str(git_repo), "--write"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert result.returncode == 0
     assert (git_repo / "VERSION").read_text().strip() == "1.3.0"

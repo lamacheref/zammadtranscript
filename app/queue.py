@@ -22,9 +22,9 @@ def enqueue_transcription(payload_dict: dict, settings: Settings | None = None) 
 
 
 def process_transcription_job(payload_dict: dict) -> dict:
+    from .config import get_settings
     from .models import WebhookPayload
     from .processor import Processor
-    from .config import get_settings
 
     settings = get_settings()
     processor = Processor(settings)

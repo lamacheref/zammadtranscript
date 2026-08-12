@@ -10,7 +10,7 @@ from fastapi.templating import Jinja2Templates
 
 from .config import Settings, get_settings
 from .logging_config import configure_logging
-from .models import WebhookPayload, TranscribeRequest
+from .models import TranscribeRequest, WebhookPayload
 from .queue import enqueue_transcription
 
 logger = logging.getLogger("zammad-autotranscription")
@@ -30,7 +30,7 @@ def valid_signature(body: bytes, signature: str) -> bool:
         return True
     for prefix in ("sha1=", "sha256="):
         if signature.startswith(prefix):
-            hex_digest = signature[len(prefix):]
+            hex_digest = signature[len(prefix) :]
             break
     else:
         hex_digest = signature
@@ -60,7 +60,7 @@ def health() -> dict:
 
 @app.get("/ui", response_class=HTMLResponse)
 async def ui_index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html", {})
 
 
 @app.post("/ui/transcribe")
@@ -73,9 +73,15 @@ async def ui_transcribe(request: Request, payload: TranscribeRequest) -> JSONRes
         ticket = processor.zammad.get_ticket(payload.ticket_id)
     except Exception as exc:
         logger.exception("Erreur récupération ticket %s : %s", payload.ticket_id, exc)
-        raise HTTPException(status_code=404, detail=f"Ticket {payload.ticket_id} introuvable")
+        raise HTTPException(
+            status_code=404, detail=f"Ticket {payload.ticket_id} introuvable"
+        ) from exc
 
-    articles = processor.zammad.get_ticket_articles(payload.ticket_id) if hasattr(processor.zammad, 'get_ticket_articles') else []
+    articles = (
+        processor.zammad.get_ticket_articles(payload.ticket_id)
+        if hasattr(processor.zammad, "get_ticket_articles")
+        else []
+    )
     if not articles:
         try:
             articles = processor.zammad.get_ticket_articles(payload.ticket_id)
@@ -96,25 +102,30 @@ async def ui_transcribe(request: Request, payload: TranscribeRequest) -> JSONRes
     if not audio_attachment:
         raise HTTPException(status_code=422, detail="Aucun attachment audio trouvé dans le ticket")
 
-    job_id = enqueue_transcription({
-        "ticket": {
-            "id": ticket.get("id"),
-            "number": ticket.get("number"),
-            "title": ticket.get("title"),
-            "customer_id": ticket.get("customer_id"),
-            "customer": ticket.get("customer"),
-        },
-        "article": {
-            "id": audio_attachment.get("id"),
-            "ticket_id": payload.ticket_id,
-            "type": "note",
-            "attachments": [audio_attachment],
+    job_id = enqueue_transcription(
+        {
+            "ticket": {
+                "id": ticket.get("id"),
+                "number": ticket.get("number"),
+                "title": ticket.get("title"),
+                "customer_id": ticket.get("customer_id"),
+                "customer": ticket.get("customer"),
+            },
+            "article": {
+                "id": audio_attachment.get("id"),
+                "ticket_id": payload.ticket_id,
+                "type": "note",
+                "attachments": [audio_attachment],
+            },
         }
-    })
+    )
 
     logger.info("Transcription manuelle ticket %s enfile (job %s)", payload.ticket_id, job_id)
 
-    return JSONResponse(status_code=202, content={"status": "accepted", "ticket_id": payload.ticket_id, "job_id": job_id})
+    return JSONResponse(
+        status_code=202,
+        content={"status": "accepted", "ticket_id": payload.ticket_id, "job_id": job_id},
+    )
 
 
 @app.post("/webhook/zammad")
@@ -143,7 +154,10 @@ async def webhook(
 
     job_id = enqueue_transcription(payload.model_dump(mode="json"))
     logger.info("Ticket %s enfile (job %s)", payload.ticket.id, job_id)
-    return JSONResponse(status_code=202, content={"status": "accepted", "ticket_id": payload.ticket.id, "job_id": job_id})
+    return JSONResponse(
+        status_code=202,
+        content={"status": "accepted", "ticket_id": payload.ticket.id, "job_id": job_id},
+    )
 
 
 if __name__ == "__main__":

@@ -32,9 +32,14 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-asyncio
 
-      - name: Run tests
+      - name: Lint
         run: |
-          python -m pytest tests/ -v
+          python -m ruff check app/ scripts/ tests/
+          python -m ruff format --check app/ scripts/ tests/
+
+      - name: Run tests with coverage
+        run: |
+          python -m pytest --cov=app --cov-fail-under=80 --cov-report=term-missing tests/ -v
 
   version:
     name: Bump version

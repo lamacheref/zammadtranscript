@@ -45,7 +45,14 @@ cp .env.example .env
 ### Tests
 
 ```bash
-.venv/bin/python -m pytest tests/
+.venv/bin/python -m pytest --cov=app tests/
+```
+
+### Lint
+
+```bash
+.venv/bin/ruff check app/ scripts/ tests/
+.venv/bin/ruff format --check app/ scripts/ tests/
 ```
 
 ## Fonctionnement
@@ -190,7 +197,14 @@ cp .env.example .env
 ### Tests
 
 ```bash
-.venv/bin/python -m pytest tests/
+.venv/bin/python -m pytest --cov=app tests/
+```
+
+### Lint
+
+```bash
+.venv/bin/ruff check app/ scripts/ tests/
+.venv/bin/ruff format --check app/ scripts/ tests/
 ```
 
 ## How It Works
