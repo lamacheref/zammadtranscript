@@ -70,6 +70,32 @@ def next_version(current: tuple[int, int, int], subjects: list[str]) -> tuple[in
     return major, minor, fix + 1
 
 
+def tag_exists(root: Path, version: tuple[int, int, int]) -> bool:
+    """Vérifie si le tag vM.m.f existe déjà localement."""
+    tag = f"v{version[0]}.{version[1]}.{version[2]}"
+    try:
+        run_git(root, "rev-parse", "-q", "--verify", f"refs/tags/{tag}")
+        return True
+    except RuntimeError:
+        return False
+
+
+def bump_without_collision(
+    current: tuple[int, int, int], subjects: list[str], root: Path
+) -> tuple[int, int, int]:
+    """
+    Calcule la prochaine version, puis incrémente le fix tant que le tag
+    correspondant existe déjà. Garantit une progression minimale de +1 fix
+    par lot de commits, même si le tag a été créé par un autre fork en parallèle.
+    """
+    new = next_version(current, subjects)
+    # Tant que la version visée est déjà taggée, on avance d'un fix.
+    while tag_exists(root, new):
+        major, minor, fix = new
+        new = (major, minor, fix + 1)
+    return new
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -89,7 +115,7 @@ def main() -> int:
 
     subjects = new_subjects(root)
     current = read_version(root)
-    new = next_version(current, subjects)
+    new = bump_without_collision(current, subjects, root)
 
     if new != current:
         if args.write:

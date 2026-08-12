@@ -98,3 +98,25 @@ def test_cli_write_flag(git_repo):
     )
     assert result.returncode == 0
     assert (git_repo / "VERSION").read_text().strip() == "1.3.0"
+
+
+def test_bump_skips_existing_tag(git_repo):
+    """Quand le tag de la version calculée existe déjà, le fix avance pour garantir la progression."""
+    commit(git_repo, "fix: bug", filename="f2.txt")
+    # créer le tag v1.2.4 (qui sera la version calculée)
+    subprocess.run(["git", "tag", "v1.2.4"], cwd=git_repo, check=True, capture_output=True)
+
+    subjects = bv.new_subjects(git_repo)
+    new = bv.bump_without_collision((1, 2, 3), subjects, git_repo)
+    # 1.2.4 taggé -> on avance à 1.2.5
+    assert new == (1, 2, 5)
+
+
+def test_bump_stops_at_unused_tag(git_repo):
+    commit(git_repo, "fix: bug", filename="f2.txt")
+    subprocess.run(["git", "tag", "v1.2.4"], cwd=git_repo, check=True, capture_output=True)
+    subprocess.run(["git", "tag", "v1.2.5"], cwd=git_repo, check=True, capture_output=True)
+    subjects = bv.new_subjects(git_repo)
+    new = bv.bump_without_collision((1, 2, 3), subjects, git_repo)
+    # 1.2.4 et 1.2.5 taggés -> on avance jusqu'à 1.2.6
+    assert new == (1, 2, 6)
