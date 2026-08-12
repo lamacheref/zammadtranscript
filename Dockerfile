@@ -25,6 +25,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libgomp1 \
+    curl \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /install /usr/local
