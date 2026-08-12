@@ -208,7 +208,16 @@ def test_ui_transcribe_ticket_not_found():
 def test_ui_transcribe_success():
     with (
         patch("app.processor.Processor") as mock_processor_cls,
-        patch("app.main.enqueue_transcription", return_value="job-ui") as mock_enqueue,
+        patch("app.main.enqueue_transcription", return_value="job-ui"),
+        patch(
+            "app.main.wait_for_job",
+            return_value={
+                "title": "Test",
+                "transcript": "Hello",
+                "customer_id": 42,
+                "customer_name": "John Doe",
+            },
+        ),
     ):
         processor = mock_processor_cls.return_value
         processor.zammad.get_ticket.return_value = {
@@ -231,6 +240,12 @@ def test_ui_transcribe_success():
         ]
         r = client.post("/ui/transcribe", json={"ticket_id": 81})
 
-    assert r.status_code == 202
-    assert r.json()["job_id"] == "job-ui"
-    mock_enqueue.assert_called_once()
+    assert r.status_code == 200
+    data = r.json()
+    assert data["success"] is True
+    assert data["ticket_id"] == 81
+    assert data["title"] == "Test"
+    assert data["transcript"] == "Hello"
+    assert data["customer_id"] == 42
+    assert data["customer_name"] == "John Doe"
+    assert data["ticket_url"].endswith("/#ticket/zoom/81")

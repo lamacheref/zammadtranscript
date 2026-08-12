@@ -11,7 +11,7 @@ from fastapi.templating import Jinja2Templates
 from .config import Settings, get_settings
 from .logging_config import configure_logging
 from .models import TranscribeRequest, WebhookPayload
-from .queue import enqueue_transcription
+from .queue import enqueue_transcription, wait_for_job
 
 logger = logging.getLogger("zammad-autotranscription")
 
@@ -64,7 +64,11 @@ async def ui_index(request: Request):
 
 
 @app.post("/ui/transcribe")
-async def ui_transcribe(request: Request, payload: TranscribeRequest) -> JSONResponse:
+async def ui_transcribe(
+    request: Request,
+    payload: TranscribeRequest,
+    wait: bool = True,
+) -> JSONResponse:
     from .processor import Processor
 
     processor = Processor(settings)
@@ -122,9 +126,37 @@ async def ui_transcribe(request: Request, payload: TranscribeRequest) -> JSONRes
 
     logger.info("Transcription manuelle ticket %s enfile (job %s)", payload.ticket_id, job_id)
 
+    if not wait:
+        return JSONResponse(
+            status_code=202,
+            content={"status": "accepted", "ticket_id": payload.ticket_id, "job_id": job_id},
+        )
+
+    # Attendre la fin du job (mode synchrone pour l'UI)
+    try:
+        result = wait_for_job(job_id, settings, timeout=300)
+    except TimeoutError:
+        raise HTTPException(
+            status_code=504, detail="Timeout: le job n'a pas terminé à temps"
+        ) from None
+    except Exception as exc:
+        logger.exception("Erreur lors du traitement du job %s : %s", job_id, exc)
+        raise HTTPException(status_code=500, detail=f"Erreur de traitement: {exc}") from None
+
+    # Construire l'URL du ticket Zammad
+    zammad_base = settings.zammad_url.rstrip("/")
+    ticket_url = f"{zammad_base}/#ticket/zoom/{payload.ticket_id}"
+
     return JSONResponse(
-        status_code=202,
-        content={"status": "accepted", "ticket_id": payload.ticket_id, "job_id": job_id},
+        content={
+            "success": True,
+            "ticket_id": payload.ticket_id,
+            "ticket_url": ticket_url,
+            "title": result.get("title"),
+            "transcript": result.get("transcript"),
+            "customer_id": result.get("customer_id"),
+            "customer_name": result.get("customer_name"),
+        }
     )
 
 
