@@ -59,6 +59,12 @@ Toutes les modifications notables de ce projet sont documentées dans ce fichier
 ### Correction
 - `requirements.txt` : ajout de `jinja2` (requis par `Jinja2Templates`, manquait en CI/Docker)
 
+### Versionnement automatique
+- `VERSION` : fichier global au format `M.m.f`
+- `scripts/bump_version.py` : calcule le prochain numéro de version (fix = `f`, `feat:` = minor, major jamais automatique)
+- CI/CD : job `version` (commit + tag `vX.Y.Z`), image Docker taguée avec la version
+- Tests : `tests/test_bump_version.py`
+
 ---
 
 # Changelog (English)
@@ -103,6 +109,12 @@ All notable changes to this project are documented in this file.
 
 ### Fix
 - `requirements.txt`: added `jinja2` (required by `Jinja2Templates`, missing in CI/Docker)
+
+### Automatic versioning
+- `VERSION`: global file in `M.m.f` format
+- `scripts/bump_version.py`: computes the next version number (fix = `f`, `feat:` = minor, major never automatic)
+- CI/CD: `version` job (commit + tag `vX.Y.Z`), Docker image tagged with the version
+- Tests: `tests/test_bump_version.py`
 - `app/queue.py`: RQ queue, `process_transcription_job` job function, `enqueue_transcription`
 - `app/worker.py`: RQ worker entry point (`python -m app.worker`)
 - `app/main.py`: webhook enqueues instead of `BackgroundTasks`, `202` response with `job_id`

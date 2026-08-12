@@ -86,6 +86,62 @@ Variables d'environnement (`.env`) :
 - `CHANGELOG.md` : historique des modifications
 - `documentations/` : spécifications webhook Zammad et configuration 3CX
 
+## Versionnement
+
+- Le fichier `VERSION` (format `M.m.f`) est mis à jour automatiquement par le CI/CD.
+- Chaque modification depuis le précédent bump est un **fix** (incrémente `f`).
+- Un commit `feat:` est une **minor** (incrémente `m`, remet `f` à 0).
+- Le **major** (`M`) n'est jamais modifié automatiquement.
+
+## Historique des commits
+
+### a267bd9 — fix: keep app/static directory tracked (empty dir not versioned by git)
+
+### c5e6898 — fix: add missing jinja2 dependency for Jinja2Templates
+
+### 516d10d — feat: add restricted centralized logging
+- `app/logging_config.py`: centralized configure_logging (idempotent, noisy loggers at WARNING)
+- main/worker use configure_logging instead of duplicated logging.basicConfig
+- new LOG_LEVEL setting in config.py, .env.example and README
+- tests for logging config
+- docs: reorganize TODO into Tests/Updates/Features/v1.0.0, update ROADMAP and CHANGELOG
+
+### f77d47a — feat: LLM client lookup/create in Zammad
+- `app/zammad.py`: find_user_by_name(), create_user() methods
+- `app/processor.py`: _resolve_customer() uses LLM customer_name to find/create Zammad user
+- Fallback to payload customer_id if no LLM name or creation fails
+- docs: TODO.md, ROADMAP.md, CHANGELOG.md updated
+
+### 8fde04a — feat: async queue (Redis + RQ) implementation
+- `app/config.py`: REDIS_URL, RQ_QUEUE_NAME settings
+- `app/queue.py`: RQ queue, enqueue_transcription, process_transcription_job
+- `app/main.py`: webhook enqueues job, returns 202 with job_id
+- `app/worker.py`: RQ worker entry point
+- docker-compose.yml: Redis service + worker service
+- requirements.txt: redis, rq
+- tests: updated mocks for enqueue_transcription
+- docs: TODO.md, ROADMAP.md, CHANGELOG.md queue marked done
+
+### 2e6ba06 — docs: update all docs for async queue (Redis+RQ) + manual UI
+- ROADMAP.md: queue unchecked (phase 3), manual UI added (phase 5)
+- TODO.md: queue + manual UI as pending tasks
+- PROJET.md: async flow with queue, worker, manual UI planned, security refs updated
+- README.md: async architecture, Redis config, worker deployment, manual UI feature
+- All FR/EN bilingual
+
+### 5b77f95 — docs: ROADMAP.md first block in French, second in English
+
+### 0e82e53 — docs: update all root docs for Docker/CI/CD + English translations
+- README.md: Docker deploy, config table, operation flow, FR/EN
+- PROJET.md: protocol updated (202 Accepted, customer_id behavior), FR/EN
+- ROADMAP.md: phases 1-4 done (Docker/CI/CD), phase 5 enhancements, FR/EN
+- TODO.md: Docker/CI checked, remaining tasks (rate limiting, LLM client, lint), FR/EN
+- CHANGELOG.md: Docker/CI transition entry, GPL-3.0, GitHub remote, FR/EN
+- Added: Dockerfile, docker-compose.yml, .dockerignore, .github/workflows/ci-cd.yml, LICENSE (GPL-3.0)
+- Removed: LXC/community-scripts references
+
+### f8dd8ef — Prototype Zammad auto-transcription : FastAPI, faster-whisper, Ollama, Zammad API, doc et tests
+
 ---
 
 # Zammad-Auto-Transcription (English)
@@ -174,3 +230,59 @@ Environment variables (`.env`):
 - `ROADMAP.md` : roadmap
 - `CHANGELOG.md` : changelog
 - `documentations/` : Zammad webhook specs and 3CX configuration
+
+## Versioning
+
+- The `VERSION` file (`M.m.f` format) is bumped automatically by CI/CD.
+- Every change since the last bump is a **fix** (increments `f`).
+- A `feat:` commit is a **minor** (increments `m`, resets `f` to 0).
+- The **major** (`M`) is never modified automatically.
+
+## Commit History
+
+### a267bd9 — fix: keep app/static directory tracked (empty dir not versioned by git)
+
+### c5e6898 — fix: add missing jinja2 dependency for Jinja2Templates
+
+### 516d10d — feat: add restricted centralized logging
+- `app/logging_config.py`: centralized configure_logging (idempotent, noisy loggers at WARNING)
+- main/worker use configure_logging instead of duplicated logging.basicConfig
+- new LOG_LEVEL setting in config.py, .env.example and README
+- tests for logging config
+- docs: reorganize TODO into Tests/Updates/Features/v1.0.0, update ROADMAP and CHANGELOG
+
+### f77d47a — feat: LLM client lookup/create in Zammad
+- `app/zammad.py`: find_user_by_name(), create_user() methods
+- `app/processor.py`: _resolve_customer() uses LLM customer_name to find/create Zammad user
+- Fallback to payload customer_id if no LLM name or creation fails
+- docs: TODO.md, ROADMAP.md, CHANGELOG.md updated
+
+### 8fde04a — feat: async queue (Redis + RQ) implementation
+- `app/config.py`: REDIS_URL, RQ_QUEUE_NAME settings
+- `app/queue.py`: RQ queue, enqueue_transcription, process_transcription_job
+- `app/main.py`: webhook enqueues job, returns 202 with job_id
+- `app/worker.py`: RQ worker entry point
+- docker-compose.yml: Redis service + worker service
+- requirements.txt: redis, rq
+- tests: updated mocks for enqueue_transcription
+- docs: TODO.md, ROADMAP.md, CHANGELOG.md queue marked done
+
+### 2e6ba06 — docs: update all docs for async queue (Redis+RQ) + manual UI
+- ROADMAP.md: queue unchecked (phase 3), manual UI added (phase 5)
+- TODO.md: queue + manual UI as pending tasks
+- PROJET.md: async flow with queue, worker, manual UI planned, security refs updated
+- README.md: async architecture, Redis config, worker deployment, manual UI feature
+- All FR/EN bilingual
+
+### 5b77f95 — docs: ROADMAP.md first block in French, second in English
+
+### 0e82e53 — docs: update all root docs for Docker/CI/CD + English translations
+- README.md: Docker deploy, config table, operation flow, FR/EN
+- PROJET.md: protocol updated (202 Accepted, customer_id behavior), FR/EN
+- ROADMAP.md: phases 1-4 done (Docker/CI/CD), phase 5 enhancements, FR/EN
+- TODO.md: Docker/CI checked, remaining tasks (rate limiting, LLM client, lint), FR/EN
+- CHANGELOG.md: Docker/CI transition entry, GPL-3.0, GitHub remote, FR/EN
+- Added: Dockerfile, docker-compose.yml, .dockerignore, .github/workflows/ci-cd.yml, LICENSE (GPL-3.0)
+- Removed: LXC/community-scripts references
+
+### f8dd8ef — Prototype Zammad auto-transcription : FastAPI, faster-whisper, Ollama, Zammad API, doc et tests
