@@ -73,9 +73,10 @@ def authorize(request: Request, authorization: str | None) -> None:
                 raise HTTPException(status_code=401, detail="Token invalide")
 
 
-@app.get("/health")
-def health() -> dict:
-    return {"status": "ok"}
+@app.api_route("/health", methods=["GET", "HEAD"])
+def health():
+    # Retourne 200 (vide pour HEAD) — compatible healthcheck wget -q --spider
+    return JSONResponse(content={"status": "ok"})
 
 
 @app.get("/ui", response_class=HTMLResponse)
