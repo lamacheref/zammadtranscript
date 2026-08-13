@@ -40,7 +40,7 @@ La couverture globale est de **97 %**, largement au-dessus du seuil de 80 % impo
 | `tests/test_bump_version.py` | 11 | Script de versionnement (`scripts/bump_version.py`) |
 | `tests/test_webhook.py` | 18 | Endpoints webhook/UI, signature HMAC, autorisation |
 | `tests/test_zammad.py` | 14 | Client API Zammad |
-| `tests/test_processor.py` | 12 | Pipeline, idempotence, retries, résolution client |
+| `tests/test_processor.py` | 12 | Pipeline, idempotence, retries, résolution client, **en-tête qualité des articles** |
 | `tests/test_title_generator.py` | 6 | Génération de titre / extraction client (LLM) |
 | `tests/test_transcriber.py` | 5 | Transcriber (ffmpeg, whisper, modèles) |
 | `tests/test_queue.py` | 4 | File RQ (Redis), job de traitement |

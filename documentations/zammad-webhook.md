@@ -35,7 +35,8 @@ Le formulaire **Nouveau webhook** présente les champs suivants (libellés fran�
 | Champ (interface FR) | Valeur recommandée pour ce projet |
 |----------------------|-----------------------------------|
 | **Nom** (*Name*) | `zammad-auto-transcription` |
-| **Point de terminaison** (*Endpoint*) | `https://<hôte-transcription>/webhook/zammad` |
+| **Point de terminaison** (*Endpoint*) | `http://<hôte-transcription>:8009/webhook/zammad` |
+> ⚠️ **Attention** : utiliser le port **8009** (ou le port exposé par Docker) pour éviter les conflits avec d'autres services (ex: FreeScout sur le port 80).
 | **Méthode de la requête** (*Request Method*) | `POST` |
 | **Vérification du certificat SSL** (*SSL verification*) | `Oui` (si certificat valide) |
 | **Connexion** (*Authentication*) | `Bearer Token` — voir § 2.3 |
@@ -81,7 +82,17 @@ Zammad envoie systématiquement (source : `lib/user_agent.rb` + `app/jobs/trigge
 | `X-Hub-Signature` | `sha1=<hex>` — signature HMAC-SHA1 du corps (si secret configuré) |
 | `Authorization` | `Bearer <token>` (si connexion = Bearer Token) |
 
-## 4. Payload par défaut (JSON)
+## 4. Format de l'article de transcription
+
+Le serveur ajoute automatiquement l'en-tête suivant au début du corps de l'article :
+
+```
+Transcription par ZammadTranscript - Attention à la qualité
+
+<transcription>
+```
+
+## 5. Payload par défaut (JSON)
 
 Si `Custom Payload` est désactivé, Zammad envoie le payload par défaut
 (`TriggerWebhookJob::RecordPayload`). Il contient l'objet `ticket` complet et l'objet
@@ -235,7 +246,31 @@ transcription se fait en arrière-plan), puis envoyer les mises à jour Zammad v
 - Rate limiting sur l'endpoint.
 - **Ne jamais** logguer le secret, le token API Zammad ou le contenu du payload complet.
 
-## 8. Références
+## 8. Dépannage
+
+### 8.1 Logs
+
+- **Application** : `docker logs zammad-autotranscription`
+- **Worker** : `docker logs zammad-worker`
+- **Redis** : `docker logs zammad-redis`
+
+### 8.2 Erreurs courantes
+
+| Erreur | Cause probable | Solution |
+|--------|----------------|----------|
+| `404 Not Found` sur `/webhook/zammad` | Endpoint mal configuré dans Zammad | Vérifier l'URL du webhook dans Zammad (doit pointer vers le serveur de transcription) |
+| `403 Forbidden` ou `401 Unauthorized` | Secret ou token incorrect | Vérifier `WEBHOOK_SECRET` et `Authorization: Bearer <token>` |
+| `500 Internal Server Error` | Erreur de traitement (Whisper/Ollama) | Vérifier les logs du worker et la connectivité aux services |
+| Timeout sur `/health` | Service non démarré | `docker compose up -d` et vérifier `GET /health` |
+| **HTML « Access denied » / « Untrusted Host »** | L'URL du webhook pointe vers le mauvais port (ex: port 80 au lieu de 8009) et tombe sur un autre service (FreeScout) | Configurer l'endpoint avec le **bon port** (ex: `http://192.168.110.10:8009/webhook/zammad`) |
+
+### 8.3 Tests
+
+```bash
+docker exec -it zammad-autotranscription bash -c "curl -v http://localhost:8000/health"
+```
+
+## 9. Références
 
 Sources de validation (traductions officielles `i18n/zammad.fr-fr.po` + code source) :
 

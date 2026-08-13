@@ -4,6 +4,10 @@ Toutes les modifications notables de ce projet sont documentées dans ce fichier
 
 ## [Non publié]
 
+### Ajouts
+- **En-tête qualité** : ajout systématique de « Transcription par ZammadTranscript - Attention à la qualité »
+sur tous les articles de transcription (flux manuel et automatique).
+
 ### Corrections
 - API Zammad : création d'article sur le bon endpoint `POST /api/v1/ticket_articles`
   (`ticket_id` dans le corps) — l'ancien `POST /api/v1/tickets/{id}/articles`

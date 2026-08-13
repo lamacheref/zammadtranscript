@@ -14,7 +14,7 @@ Architecture asynchrone : webhook → file d'attente Redis (RQ) → worker → M
 - Transcription locale via faster-whisper (CPU, `int8`)
 - Rédaction d'un titre et extraction du nom du client via LLM local (Ollama)
 - **Résolution client par numéro de téléphone** : extraction du pattern `De: +33...` du corps email 3CX, normalisation FR (local ↔ international, correction zéro en trop), recherche Zammad par téléphone → skip LLM si trouvé
-- Mise à jour automatique du ticket Zammad (titre, `customer_id`, article de transcription)
+- Mise à jour automatique du ticket Zammad (titre, `customer_id`, article de transcription avec **en-tête qualité** : « Transcription par ZammadTranscript - Attention à la qualité »)
 - Idempotence (anti double-transcription) et retries intégrées
 - Interface web manuelle (prévue) : saisie n° ticket → transcription à la demande
 
@@ -28,8 +28,9 @@ docker compose up -d
 ```
 
 L'endpoint webhook est `POST /webhook/zammad` (à configurer dans Zammad comme
-trigger, voir `documentations/zammad-webhook.md`). Statut de l'application :
-`GET /health`.
+trigger, voir `documentations/zammad-webhook.md`). **⚠️ Utiliser le port exposé par Docker**
+(ex: `8009`) pour éviter les conflits avec d'autres services (FreeScout, etc.). Statut de
+l'application : `GET /health`.
 
 ### Déploiement manuel (Python)
 
