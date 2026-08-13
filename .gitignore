@@ -6,3 +6,4 @@ __pycache__/
 app/_data/
 .pytest_cache/
 .coverage
+uv.lock

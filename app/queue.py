@@ -28,7 +28,7 @@ def enqueue_transcription(payload_dict: dict, settings: Settings | None = None) 
 def enqueue_manual_transcription(ticket_input: int | str, settings: Settings | None = None) -> str:
     queue = get_queue(settings)
     job = queue.enqueue(
-        "app.queue.process_manual_job",
+        "app.queue.process_manual_prepare_job",
         ticket_input,
         job_timeout="10m",
     )
@@ -103,10 +103,11 @@ def process_transcription_job(payload_dict: dict) -> dict:
     return processor.process(payload, progress=_progress_callback(get_current_job()))
 
 
-def process_manual_job(ticket_input: int | str) -> dict:
+def process_manual_prepare_job(ticket_input: int | str) -> dict:
+    """Prépare un brouillon de transcription (sans toucher Zammad)."""
     from .config import get_settings
     from .processor import Processor
 
     settings = get_settings()
     processor = Processor(settings)
-    return processor.process_manual(ticket_input, progress=_progress_callback(get_current_job()))
+    return processor.prepare_manual(ticket_input, progress=_progress_callback(get_current_job()))

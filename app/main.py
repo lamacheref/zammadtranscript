@@ -14,7 +14,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from .config import Settings, get_settings
 from .logging_config import configure_logging
 from .model_download import ensure_ollama_model_in_background
-from .models import TranscribeRequest, WebhookPayload
+from .models import PostDraftRequest, TranscribeRequest, WebhookPayload
 from .queue import (
     enqueue_manual_transcription,
     enqueue_transcription,
@@ -184,6 +184,37 @@ async def ui_status(job_id: str) -> JSONResponse:
         }
     status["result"] = result
     return JSONResponse(content=status)
+
+
+@app.post("/ui/post")
+async def ui_post(payload: PostDraftRequest) -> JSONResponse:
+    """Applique le brouillon corrigé par l'opérateur au ticket Zammad."""
+    from .processor import Processor
+
+    processor = Processor(settings)
+    try:
+        result = processor.commit_manual(
+            payload.ticket_id,
+            payload.article_id,
+            payload.transcript,
+            payload.title,
+            customer_name=payload.customer_name,
+            customer_id=payload.customer_id,
+        )
+    except Exception as exc:
+        logger.exception("Ajout au ticket %s échoué : %s", payload.ticket_id, exc)
+        return JSONResponse(status_code=400, content={"success": False, "error": str(exc)})
+    zammad_base = settings.zammad_url.rstrip("/")
+    result["ticket_url"] = f"{zammad_base}/#ticket/zoom/{result['ticket_id']}"
+    return JSONResponse(content=result)
+
+
+@app.get("/ui/customers/search")
+def ui_customers_search(q: str = "") -> JSONResponse:
+    """Recherche de clients Zammad pour le changement de client côté opérateur."""
+    from .zammad import ZammadClient
+
+    return JSONResponse(content=ZammadClient(settings).search_users(q))
 
 
 @app.post("/webhook/zammad")

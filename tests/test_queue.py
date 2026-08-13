@@ -65,24 +65,24 @@ def test_enqueue_manual_transcription(mock_get_queue):
     assert job_id == "job-ui"
     queue.enqueue.assert_called_once()
     args, kwargs = queue.enqueue.call_args
-    assert args[0] == "app.queue.process_manual_job"
+    assert args[0] == "app.queue.process_manual_prepare_job"
     assert args[1] == 202608069400166
 
 
-def test_process_manual_job(monkeypatch):
+def test_process_manual_prepare_job(monkeypatch):
     import app.queue as queue_mod
 
     fake_processor = MagicMock()
-    fake_processor.process_manual.return_value = {"success": True, "steps": []}
+    fake_processor.prepare_manual.return_value = {"success": True, "draft": True, "steps": []}
 
     monkeypatch.setattr("app.config.get_settings", lambda: MagicMock())
     monkeypatch.setattr("app.processor.Processor", lambda settings: fake_processor)
 
-    result = queue_mod.process_manual_job(6475)
+    result = queue_mod.process_manual_prepare_job(6475)
 
-    assert result == {"success": True, "steps": []}
-    fake_processor.process_manual.assert_called_once()
-    assert fake_processor.process_manual.call_args.args[0] == 6475
+    assert result == {"success": True, "draft": True, "steps": []}
+    fake_processor.prepare_manual.assert_called_once()
+    assert fake_processor.prepare_manual.call_args.args[0] == 6475
 
 
 class _FakeJob:

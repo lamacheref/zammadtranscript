@@ -1,3 +1,5 @@
+from urllib.parse import quote
+
 import httpx
 
 from .config import Settings
@@ -88,6 +90,27 @@ class ZammadClient:
             return None
         except ZammadError:
             return None
+
+    def search_users(self, query: str, limit: int = 10) -> list:
+        """Recherche floue de clients Zammad (validation manuelle de l'opérateur)."""
+        if not query or not query.strip():
+            return []
+        try:
+            result = self._get(f"/api/v1/users/search?query={quote(query.strip())}")
+        except ZammadError:
+            return []
+        users = result if isinstance(result, list) else result.get("users", [])
+        return [
+            {
+                "id": u.get("id"),
+                "firstname": u.get("firstname"),
+                "lastname": u.get("lastname"),
+                "email": u.get("email"),
+                "phone": u.get("phone") or u.get("mobile") or "",
+            }
+            for u in users[:limit]
+            if u.get("id")
+        ]
 
     def _get(self, path: str) -> dict:
         return self._request("GET", path)

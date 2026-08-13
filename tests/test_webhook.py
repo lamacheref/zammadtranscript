@@ -271,3 +271,100 @@ def test_ui_status_finished_with_ticket_url():
     assert data["status"] == "finished"
     assert data["result"]["ticket_id"] == 6475
     assert data["result"]["ticket_url"].endswith("/#ticket/zoom/6475")
+
+
+def test_ui_post_commits_draft():
+    """POST /ui/post applique le brouillon validé et renvoie l'URL du ticket."""
+    fake = MagicMock()
+    fake.commit_manual.return_value = {
+        "success": True,
+        "ticket_id": 6475,
+        "article_id": 505,
+        "transcript": "bonjour",
+        "title": "Titre",
+        "customer_id": 42,
+        "customer_name": "Alice Dupont",
+    }
+    payload = {
+        "ticket_id": 6475,
+        "article_id": 104,
+        "transcript": "bonjour",
+        "title": "Titre corrigé",
+        "customer_name": "Alice Dupont",
+    }
+    with patch("app.processor.Processor", return_value=fake):
+        r = client.post("/ui/post", json=payload)
+
+    assert r.status_code == 200
+    data = r.json()
+    assert data["success"] is True
+    assert data["ticket_url"].endswith("/#ticket/zoom/6475")
+    fake.commit_manual.assert_called_once_with(
+        6475,
+        104,
+        "bonjour",
+        "Titre corrigé",
+        customer_name="Alice Dupont",
+        customer_id=None,
+    )
+
+
+def test_ui_post_customer_id_wins():
+    """POST /ui/post transmet customer_id prioritaire sur customer_name."""
+    fake = MagicMock()
+    fake.commit_manual.return_value = {"success": True, "ticket_id": 1}
+    payload = {
+        "ticket_id": 1,
+        "transcript": "x",
+        "title": "T",
+        "customer_id": 42,
+        "customer_name": "Ne doit pas être utilisé",
+    }
+    with patch("app.processor.Processor", return_value=fake):
+        r = client.post("/ui/post", json=payload)
+
+    assert r.status_code == 200
+    fake.commit_manual.assert_called_once_with(
+        1, None, "x", "T", customer_name="Ne doit pas être utilisé", customer_id=42
+    )
+
+
+def test_ui_post_error_returns_400():
+    """POST /ui/post renvoie 400 {success: False} si le commit échoue."""
+    fake = MagicMock()
+    fake.commit_manual.side_effect = RuntimeError("Zammad en panne")
+    with patch("app.processor.Processor", return_value=fake):
+        r = client.post(
+            "/ui/post",
+            json={"ticket_id": 1, "transcript": "x", "title": "T"},
+        )
+
+    assert r.status_code == 400
+    data = r.json()
+    assert data["success"] is False
+    assert "panne" in data["error"]
+
+
+def test_ui_customers_search():
+    """GET /ui/customers/search renvoie la liste des clients Zammad."""
+    fake = MagicMock()
+    fake.search_users.return_value = [
+        {"id": 1, "firstname": "Alice", "lastname": "Dupont", "email": "a@x.fr", "phone": ""}
+    ]
+    with patch("app.zammad.ZammadClient", return_value=fake):
+        r = client.get("/ui/customers/search", params={"q": "alice"})
+
+    assert r.status_code == 200
+    assert r.json()[0]["email"] == "a@x.fr"
+    fake.search_users.assert_called_once_with("alice")
+
+
+def test_ui_customers_search_empty_q():
+    """GET /ui/customers/search sans 'q' ne lève pas et renvoie []."""
+    fake = MagicMock()
+    fake.search_users.return_value = []
+    with patch("app.zammad.ZammadClient", return_value=fake):
+        r = client.get("/ui/customers/search")
+
+    assert r.status_code == 200
+    assert r.json() == []

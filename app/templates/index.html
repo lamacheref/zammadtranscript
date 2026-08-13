@@ -63,6 +63,21 @@
         .error-box { background: #fdf2f2; border: 1px solid #e74c3c; border-radius: 6px; padding: 1rem; margin-top: 1rem; }
         .success-box h3 { color: #27ae60; }
         .error-box h3 { color: #e74c3c; }
+        .draft-box { background: #fdfefe; border: 1px solid #aed6f1; border-radius: 6px; padding: 1rem; margin-top: 1rem; }
+        .draft-box h3 { color: #1a5276; margin-bottom: 0.75rem; }
+        .draft-input { width: 100%; padding: 0.6rem; border: 2px solid #ddd; border-radius: 6px; font-size: 0.95rem; margin-top: 0.25rem; }
+        .draft-input:focus { outline: none; border-color: #3498db; }
+        textarea.draft-input { font-family: inherit; resize: vertical; }
+        .customer-row { display: flex; gap: 0.5rem; align-items: center; }
+        .customer-row .draft-input { flex: 1; }
+        .ghost-btn { padding: 0.5rem 0.8rem; background: #fff; color: #555; border: 1px solid #ccc; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+        .ghost-btn:hover { background: #f0f0f0; }
+        #customer-results { margin-top: 0.4rem; display: flex; flex-direction: column; gap: 0.25rem; }
+        .customer-option { text-align: left; padding: 0.5rem 0.7rem; background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+        .customer-option:hover { background: #eaf2f8; border-color: #aed6f1; }
+        .btn-row { display: flex; gap: 0.6rem; margin-top: 0.5rem; }
+        .btn-row .btn { flex: 1; }
+        .hint { font-size: 0.82rem; color: #888; margin-top: 0.4rem; }
         .success-box pre, .error-box pre { background: #f8f9fa; padding: 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.9rem; max-height: 300px; }
         .detail { margin: 0.35rem 0; }
         a { color: #2980b9; }
@@ -265,6 +280,139 @@
             });
         }
 
+        function renderDraftEditor(result) {
+            detailsContainer.innerHTML = `
+                <div class="draft-box">
+                    <h3>Vérifier avant d'ajouter au ticket</h3>
+                    <div class="form-group">
+                        <label for="edit-title">Titre du ticket</label>
+                        <input type="text" id="edit-title" class="draft-input" value="${esc(result.title || '')}">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-customer">Client</label>
+                        <div class="customer-row">
+                            <input type="text" id="edit-customer" class="draft-input"
+                                   value="${esc(result.customer_suggestion || '')}"
+                                   placeholder="Rechercher un client Zammad ou laisser la suggestion">
+                            <button type="button" id="customer-clear-btn" class="ghost-btn"
+                                    title="Ne pas attribuer de client">✕</button>
+                        </div>
+                        <div id="customer-results"></div>
+                        <p class="hint">Tapez 2 caractères minimum : la recherche Zammad s'affiche ici. Choisissez un client
+                        existant pour l'attribuer (au lieu de la suggestion). Aucun client n'est créé automatiquement :
+                        si le client n'existe pas, créez-le d'abord dans Zammad, puis sélectionnez-le ici.</p>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-transcript">Transcription (corrigeable)</label>
+                        <textarea id="edit-transcript" class="draft-input" rows="12">${esc(result.transcript || '')}</textarea>
+                    </div>
+                    <div class="btn-row">
+                        <button type="button" id="post-btn" class="btn">Ajouter au ticket</button>
+                        <button type="button" id="discard-btn" class="btn ghost-btn">Annuler</button>
+                    </div>
+                    <p class="hint">Le ticket Zammad ne sera modifié (titre, client, article) que lorsque vous
+                    cliquerez sur « Ajouter au ticket ».</p>
+                </div>`;
+
+            const titleInput = document.getElementById('edit-title');
+            const custInput = document.getElementById('edit-customer');
+            const transcriptInput = document.getElementById('edit-transcript');
+            const postBtn = document.getElementById('post-btn');
+            let selectedCustomerId = null;
+
+            const resultsBox = document.getElementById('customer-results');
+            document.getElementById('customer-clear-btn').addEventListener('click', () => {
+                custInput.value = '';
+                selectedCustomerId = null;
+                custInput.placeholder = 'Aucun client attribué';
+                resultsBox.innerHTML = '';
+            });
+
+            let searchTimer = null;
+            custInput.addEventListener('input', () => {
+                selectedCustomerId = null;
+                clearTimeout(searchTimer);
+                const q = custInput.value.trim();
+                if (q.length < 2) { resultsBox.innerHTML = ''; return; }
+                searchTimer = setTimeout(async () => {
+                    let users = [];
+                    try {
+                        const res = await fetch(`/ui/customers/search?q=${encodeURIComponent(q)}`);
+                        if (res.ok) users = await res.json();
+                    } catch (e) { return; }
+                    resultsBox.innerHTML = '';
+                    users.forEach(u => {
+                        const btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'customer-option';
+                        const name = `${u.firstname || ''} ${u.lastname || ''}`.trim();
+                        btn.textContent = name || u.email || `Client #${u.id}`;
+                        btn.title = [u.email, u.phone].filter(Boolean).join(' — ');
+                        btn.addEventListener('click', () => {
+                            custInput.value = btn.textContent;
+                            selectedCustomerId = u.id;
+                            resultsBox.innerHTML = '';
+                        });
+                        resultsBox.appendChild(btn);
+                    });
+                }, 350);
+            });
+
+            postBtn.addEventListener('click', async () => {
+                postBtn.disabled = true;
+                postBtn.textContent = 'Ajout en cours…';
+                const customerName = custInput.value.trim();
+                const payload = {
+                    ticket_id: result.ticket_id,
+                    article_id: result.article_id,
+                    title: titleInput.value.trim(),
+                    transcript: transcriptInput.value,
+                    customer_id: selectedCustomerId,
+                    customer_name: selectedCustomerId ? undefined : (customerName || undefined)
+                };
+                try {
+                    const res = await fetch('/ui/post', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const data = await res.json();
+                    if (!res.ok || data.success !== true) {
+                        throw new Error(data.error || data.detail || 'Erreur lors de l\'ajout au ticket');
+                    }
+                    renderPosted(data);
+                } catch (err) {
+                    postBtn.disabled = false;
+                    postBtn.textContent = 'Ajouter au ticket';
+                    const box = document.createElement('div');
+                    box.className = 'error-box';
+                    box.innerHTML = `<h3>Erreur</h3><p class="detail">${esc(err.message)}</p>`;
+                    detailsContainer.appendChild(box);
+                }
+            });
+
+            document.getElementById('discard-btn').addEventListener('click', () => {
+                detailsContainer.innerHTML =
+                    '<div class="hint">Transcription annulée — aucune modification appliquée à Zammad.</div>';
+            });
+        }
+
+        function renderPosted(result) {
+            resultTitle.textContent = '✅ Ajouté au ticket';
+            const ticketUrl = result.ticket_url || '';
+            detailsContainer.innerHTML = `
+                <div class="success-box">
+                    <h3>Ajouté au ticket</h3>
+                    <p class="detail"><strong>Ticket :</strong>
+                        ${ticketUrl ? `<a href="${esc(ticketUrl)}" target="_blank" rel="noopener">#${esc(result.ticket_id)}</a>` : `#${esc(result.ticket_id)}`}
+                    </p>
+                    <p class="detail"><strong>Titre :</strong> ${esc(result.title || '')}</p>
+                    <p class="detail"><strong>Client :</strong> ${esc(result.customer_name || (result.customer_id ? 'Client #' + result.customer_id : 'Non attribué'))}</p>
+                    <p class="detail"><strong>Transcription :</strong></p>
+                    <pre>${esc(result.transcript || '')}</pre>
+                </div>`;
+        }
+
         function renderResult(status) {
             const steps = status.steps || [];
             const result = status.result || {};
@@ -286,6 +434,11 @@
                     </div>`;
                 const retryBtn = document.getElementById('retry-btn');
                 if (retryBtn) retryBtn.addEventListener('click', () => form.requestSubmit());
+                return;
+            }
+
+            if (result && result.success && result.draft) {
+                renderDraftEditor(result);
                 return;
             }
 

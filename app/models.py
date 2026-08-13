@@ -50,3 +50,14 @@ class ProcessingResult(BaseModel):
 
 class TranscribeRequest(BaseModel):
     ticket_id: int
+
+
+class PostDraftRequest(BaseModel):
+    """Brouillon validé par l'opérateur : à appliquer au ticket Zammad."""
+
+    ticket_id: int
+    article_id: int | None = None
+    transcript: str
+    title: str = ""
+    customer_id: int | None = None
+    customer_name: str | None = None

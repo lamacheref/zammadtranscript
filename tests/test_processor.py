@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from app.config import Settings
 from app.models import WebhookPayload
@@ -28,8 +28,6 @@ def payload(ticket_id=81, article_id=104):
                 "id": ticket_id,
                 "number": "10081",
                 "title": "Webhook-Test",
-                "customer_id": 8,
-                "customer": {"id": 8, "firstname": "Emily", "lastname": "Adams"},
             },
             "article": {
                 "id": article_id,
@@ -199,8 +197,8 @@ def test_no_retries_manual_mode(tmp_path):
     assert "network down" in download_step["error"]
 
 
-def test_process_manual_success(tmp_path):
-    """Le pipeline manuel rapporte chaque étape (ticket, article, download, transcription)."""
+def test_prepare_manual_success(tmp_path):
+    """Le brouillon manuel rapporte chaque étape sans écrire dans Zammad."""
     processor = make_processor(tmp_path)
     reported = []
 
@@ -216,8 +214,8 @@ def test_process_manual_success(tmp_path):
                 "id": 6475,
                 "number": "202608069400166",
                 "title": "Nouveau message vocal",
-                "customer_id": 8,
-                "customer": {},
+                "customer_id": None,
+                "customer": None,
             },
         ),
         patch.object(
@@ -233,25 +231,34 @@ def test_process_manual_success(tmp_path):
         ),
         patch.object(processor.zammad, "get_attachment", return_value=b"x") as mock_get_attachment,
         patch.object(processor.transcriber, "transcribe", return_value="bonjour test"),
+        patch.object(processor.zammad, "find_user_by_phone", return_value=None),
         patch.object(
-            processor.titles, "generate", return_value={"title": "Titre", "customer_name": "Alice"}
+            processor.titles,
+            "generate",
+            return_value={"title": "Titre", "customer_name": "Alice"},
         ),
-        # Résolution client par téléphone : le body (De: +33...) est bien transmis
+        patch.object(processor.zammad, "find_user_by_name", return_value=None),
+        patch.object(processor.zammad, "update_ticket", MagicMock(return_value={})) as mock_update,
+        patch.object(processor.zammad, "create_article", MagicMock(return_value={})) as mock_create,
         patch.object(
-            processor.zammad,
-            "find_user_by_phone",
-            return_value={"id": 42, "firstname": "Alice", "lastname": "Dupont"},
-        ),
-        patch.object(processor.zammad, "update_ticket", return_value={}),
-        patch.object(processor.zammad, "create_article", return_value={}),
+            processor.zammad, "create_user", MagicMock(return_value={})
+        ) as mock_create_user,
     ):
-        result = processor.process_manual(202608069400166, progress=progress)
+        result = processor.prepare_manual(202608069400166, progress=progress)
+
+        # Aucune écriture Zammad pendant la préparation
+        mock_update.assert_not_called()
+        mock_create.assert_not_called()
+        mock_create_user.assert_not_called()
 
     assert result["success"] is True
+    assert result["draft"] is True
     assert result["ticket_id"] == 6475
+    assert result["article_id"] == 104
     assert result["title"] == "Titre"
     assert result["transcript"] == "bonjour test"
-    assert result["customer_id"] == 42
+    assert result["customer_suggestion"] == "Alice"
+    assert result["customer_id_suggestion"] is None
     assert reported == ["ticket", "article", "download", "transcription"]
     assert [s["step"] for s in result["steps"]] == [
         "ticket",
@@ -264,22 +271,23 @@ def test_process_manual_success(tmp_path):
     assert mock_get_attachment.call_args.args[0] == attachment_url
 
 
-def test_process_manual_ticket_not_found(tmp_path):
+def test_prepare_manual_ticket_not_found(tmp_path):
     processor = make_processor(tmp_path)
 
     with (
         patch.object(processor.zammad, "get_ticket", side_effect=ZammadError("404")),
         patch.object(processor.zammad, "find_ticket_by_number", return_value=None),
     ):
-        result = processor.process_manual(99999)
+        result = processor.prepare_manual(99999)
 
     assert result["success"] is False
+    assert result["draft"] is False
     ticket_step = result["steps"][0]
     assert ticket_step["step"] == "ticket"
     assert ticket_step["status"] == "error"
 
 
-def test_process_manual_no_audio_article(tmp_path):
+def test_prepare_manual_no_audio_article(tmp_path):
     processor = make_processor(tmp_path)
 
     with (
@@ -300,12 +308,95 @@ def test_process_manual_no_audio_article(tmp_path):
             return_value=[{"id": 104, "attachments": [{"id": 1, "filename": "doc.pdf"}]}],
         ),
     ):
-        result = processor.process_manual(6475)
+        result = processor.prepare_manual(6475)
 
     assert result["success"] is False
+    assert result["draft"] is False
     article_step = [s for s in result["steps"] if s["step"] == "article"][0]
     assert article_step["status"] == "error"
     assert "audio" in article_step["error"]
+
+
+def test_commit_manual(tmp_path):
+    """L'opérateur valide un brouillon : titre, client, article sont écrits."""
+    processor = make_processor(tmp_path)
+
+    with (
+        patch.object(
+            processor.zammad,
+            "find_user_by_name",
+            return_value={"id": 42, "firstname": "Alice", "lastname": "Dupont"},
+        ),
+        patch.object(processor.zammad, "update_ticket", return_value={}) as mock_update,
+        patch.object(processor.zammad, "create_article", return_value={"id": 505}) as mock_create,
+        patch.object(processor, "_mark_done", return_value=None) as mock_done,
+    ):
+        result = processor.commit_manual(
+            ticket_id=6475,
+            article_id=104,
+            transcript="bonjour test",
+            title="Titre corrigé",
+            customer_name="Alice Dupont",
+        )
+
+    assert result["success"] is True
+    assert result["ticket_id"] == 6475
+    assert result["article_id"] == 505
+    assert result["customer_id"] == 42
+    assert result["customer_name"] == "Alice Dupont"
+    assert mock_update.call_args.args == (6475, {"title": "Titre corrigé", "customer_id": 42})
+    article_payload = mock_create.call_args.args[1]
+    assert article_payload["body"] == "bonjour test"
+    assert article_payload["type"] == "note"
+    assert article_payload["sender"] == "Agent"
+    assert article_payload["content_type"] == "text/plain"
+    assert article_payload["internal"] is False
+    assert article_payload["subject"] == "Titre corrigé"
+    assert article_payload["reply_to"] == 104
+    mock_done.assert_called_once()
+
+
+def test_commit_manual_keeps_reply_article_id_when_zammad_no_id(tmp_path):
+    """En l'absence d'id dans la réponse Zammad, on retombe sur l'article source."""
+    processor = make_processor(tmp_path)
+
+    with (
+        patch.object(processor.zammad, "update_ticket", return_value={}),
+        patch.object(processor.zammad, "create_article", return_value={}),
+        patch.object(processor, "_mark_done", return_value=None),
+    ):
+        result = processor.commit_manual(
+            ticket_id=6475,
+            article_id=104,
+            transcript="bonjour test",
+            title="",
+        )
+
+    assert result["success"] is True
+    assert result["article_id"] == 104
+
+
+def test_pipeline_article_uses_agent_sender(tmp_path):
+    """L'article créé par le webhook est explicite : type note, sender Agent."""
+    processor = make_processor(tmp_path)
+
+    with (
+        patch.object(processor.zammad, "get_attachment", return_value=b"x"),
+        patch.object(processor.transcriber, "transcribe", return_value="Salut"),
+        patch.object(
+            processor.titles, "generate", return_value={"title": "Titre", "customer_name": None}
+        ),
+        patch.object(processor.zammad, "update_ticket", return_value={}),
+        patch.object(processor.zammad, "create_article", return_value={"id": 9}) as mock_article,
+    ):
+        result = processor.process(payload())
+
+    assert result["success"] is True
+    article_payload = mock_article.call_args.args[1]
+    assert article_payload["sender"] == "Agent"
+    assert article_payload["type"] == "note"
+    assert article_payload["content_type"] == "text/plain"
+    assert article_payload["internal"] is False
 
 
 def test_empty_transcript_fails_step(tmp_path):
@@ -327,53 +418,169 @@ def test_empty_transcript_fails_step(tmp_path):
     assert "Transcription vide" in transcription_step["error"]
 
 
-def test_customer_resolution_uses_payload_customer(tmp_path):
+def test_plan_uses_payload_customer_without_llm(tmp_path):
+    """Client déjà posé sur le ticket : réutilisé. Ollama appelé pour le titre seulement."""
     processor = make_processor(tmp_path)
     p = payload()
     p.ticket.customer = {"id": 8, "firstname": "Emily", "lastname": "Adams"}
 
-    assert processor._resolve_customer(p, "Acme") == 8
+    with patch.object(
+        processor.titles,
+        "generate",
+        return_value={"title": "Titre Ollama", "customer_name": "Autre nom"},
+    ) as mock_generate:
+        plan = processor._plan_analysis(p, "transcription")
+
+    assert plan["customer_id"] == 8
+    assert plan["customer_name"] == "Emily Adams"
+    assert plan["title"] == "Titre Ollama"
+    mock_generate.assert_called_once()
 
 
-def test_customer_resolution_llm_lookup(tmp_path):
+def test_plan_uses_phone_without_llm_client(tmp_path):
+    """Client trouvé par téléphone : utilisé. L'avis client d'Ollama est ignoré,
+    mais Ollama reste appelé pour générer le titre."""
     processor = make_processor(tmp_path)
     p = payload()
     p.ticket.customer = None
+    p.article.body = "De: +33 6 12 34 56 78<br>Appel manqué"
 
-    with patch.object(processor.zammad, "find_user_by_name", return_value={"id": 55}):
-        assert processor._resolve_customer(p, "Acme") == 55
+    with (
+        patch.object(
+            processor.zammad,
+            "find_user_by_phone",
+            return_value={"id": 42, "firstname": "Alice", "lastname": "Dupont"},
+        ),
+        patch.object(
+            processor.titles,
+            "generate",
+            return_value={"title": "Titre Ollama", "customer_name": "Client inventé par LLM"},
+        ) as mock_generate,
+        patch.object(processor.zammad, "find_user_by_name") as mock_by_name,
+    ):
+        plan = processor._plan_analysis(p, "transcription")
+
+    assert plan["customer_id"] == 42
+    assert plan["customer_name"] == "Alice Dupont"
+    assert plan["title"] == "Titre Ollama"
+    mock_generate.assert_called_once()
+    mock_by_name.assert_not_called()
 
 
-def test_customer_resolution_llm_create(tmp_path):
+def test_plan_phone_not_found_still_uses_llm(tmp_path):
+    """Téléphone non trouvé : Ollama propose titre + client, recherché dans Zammad."""
     processor = make_processor(tmp_path)
     p = payload()
     p.ticket.customer = None
+    p.article.body = "De: +33 6 12 34 56 78<br>Appel manqué"
+
+    with (
+        patch.object(processor.zammad, "find_user_by_phone", return_value=None),
+        patch.object(
+            processor.titles,
+            "generate",
+            return_value={"title": "Titre", "customer_name": "Acme"},
+        ),
+        patch.object(
+            processor.zammad,
+            "find_user_by_name",
+            return_value={"id": 55, "firstname": "Acme", "lastname": "Corp"},
+        ),
+    ):
+        plan = processor._plan_analysis(p, "transcription")
+
+    assert plan["title"] == "Titre"
+    assert plan["customer_id"] == 55
+    assert plan["customer_name"] == "Acme Corp"
+
+
+def test_plan_llm_name_not_found_never_creates(tmp_path):
+    """Client proposé par Ollama mais absent de Zammad : nom indiqué, AUCUNE création."""
+    processor = make_processor(tmp_path)
+    p = payload()
+    p.ticket.customer = None
+    p.article.body = ""
+
+    with (
+        patch.object(
+            processor.titles,
+            "generate",
+            return_value={"title": "Titre", "customer_name": "Acme"},
+        ),
+        patch.object(processor.zammad, "find_user_by_name", return_value=None),
+        patch.object(processor.zammad, "create_user") as mock_create,
+    ):
+        plan = processor._plan_analysis(p, "transcription")
+
+    assert plan["customer_id"] is None
+    assert plan["customer_name"] == "Acme"
+    mock_create.assert_not_called()
+
+
+def test_plan_no_llm_when_no_customer_info(tmp_path):
+    """Sans téléphone ni nom, Ollama fournit le titre, pas de client."""
+    processor = make_processor(tmp_path)
+    p = payload()
+    p.ticket.customer = None
+    p.article.body = ""
+
+    with patch.object(
+        processor.titles,
+        "generate",
+        return_value={"title": "Titre", "customer_name": None},
+    ):
+        plan = processor._plan_analysis(p, "transcription")
+
+    assert plan["title"] == "Titre"
+    assert plan["customer_id"] is None
+    assert plan["customer_name"] is None
+
+
+def test_commit_manual_never_creates_customer(tmp_path):
+    """commit_manual : nom introuvable dans Zammad → aucun client créé."""
+    processor = make_processor(tmp_path)
 
     with (
         patch.object(processor.zammad, "find_user_by_name", return_value=None),
-        patch.object(processor.zammad, "create_user", return_value={"id": 66}),
+        patch.object(processor.zammad, "create_user") as mock_create,
+        patch.object(processor.zammad, "update_ticket", return_value={}) as mock_update,
+        patch.object(processor.zammad, "create_article", return_value={"id": 1}),
+        patch.object(processor, "_mark_done", return_value=None),
     ):
-        assert processor._resolve_customer(p, "Acme") == 66
+        result = processor.commit_manual(
+            ticket_id=6475,
+            article_id=None,
+            transcript="bonjour",
+            title="Titre",
+            customer_name="Client inconnu",
+        )
+
+    assert result["success"] is True
+    assert result["customer_id"] is None
+    assert mock_create.assert_not_called() is None
+    assert mock_update.call_args.args[1] == {"title": "Titre"}
 
 
-def test_customer_resolution_create_failure_returns_none(tmp_path):
+def test_commit_manual_resolves_existing_customer_by_name(tmp_path):
+    """commit_manual : nom trouvé dans Zammad → client_id utilisé."""
     processor = make_processor(tmp_path)
-    p = payload()
-    p.ticket.customer = None
 
     with (
-        patch.object(processor.zammad, "find_user_by_name", return_value=None),
-        patch.object(processor.zammad, "create_user", side_effect=ZammadError("nope")),
+        patch.object(processor.zammad, "find_user_by_name", return_value={"id": 42}),
+        patch.object(processor.zammad, "update_ticket", return_value={}) as mock_update,
+        patch.object(processor.zammad, "create_article", return_value={"id": 1}),
+        patch.object(processor, "_mark_done", return_value=None),
     ):
-        assert processor._resolve_customer(p, "Acme") is None
+        result = processor.commit_manual(
+            ticket_id=6475,
+            article_id=None,
+            transcript="bonjour",
+            title="Titre",
+            customer_name="Alice Dupont",
+        )
 
-
-def test_customer_resolution_no_name_returns_none(tmp_path):
-    processor = make_processor(tmp_path)
-    p = payload()
-    p.ticket.customer = None
-
-    assert processor._resolve_customer(p, None) is None
+    assert result["customer_id"] == 42
+    assert mock_update.call_args.args[1] == {"title": "Titre", "customer_id": 42}
 
 
 def test_missing_audio_with_url_uses_url(tmp_path):
