@@ -4,6 +4,18 @@ Toutes les modifications notables de ce projet sont documentées dans ce fichier
 
 ## [Non publié]
 
+### Corrections
+- API Zammad : création d'article sur le bon endpoint `POST /api/v1/ticket_articles`
+  (`ticket_id` dans le corps) — l'ancien `POST /api/v1/tickets/{id}/articles`
+  retournait 404 "This page doesn't exist.". `get_article` corrigé de même
+  (`GET /api/v1/ticket_articles/{id}`).
+- Registre Gitea (CI) : retrait de `https://` de l'URL du registre utilisé dans
+  les tags Docker (ancre `sed ^` ne matchait jamais avec le préfixe `registry=`).
+- Pull du modèle Ollama : utilisation de `OLLAMA_URL` configuré au lieu de
+  `127.0.0.1:11434` personnelle du client (`Connection refused` en conteneur).
+- Pytest Gitea : `pythonpath = "."` (syntaxe sans crochets) rend `app`/`scripts`
+  importables sous `uv run pytest`.
+
 ### Ajouts
 - CI/CD : scission en deux workflows indépendants :
   - `.github/workflows/ci-cd.yml` (GitHub) : `actions/setup-python`, image poussée sur `ghcr.io`.

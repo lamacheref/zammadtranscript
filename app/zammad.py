@@ -28,7 +28,8 @@ class ZammadClient:
         return self._get(f"/api/v1/tickets/{ticket_id}")
 
     def get_article(self, ticket_id: int, article_id: int) -> dict:
-        return self._get(f"/api/v1/tickets/{ticket_id}/articles/{article_id}")
+        # Endpoint Zammad : GET /api/v1/ticket_articles/{article_id}
+        return self._get(f"/api/v1/ticket_articles/{article_id}")
 
     def get_ticket_articles(self, ticket_id: int) -> list:
         # Endpoint Zammad : GET /api/v1/ticket_articles/by_ticket/{ticket_id}
@@ -38,7 +39,9 @@ class ZammadClient:
         return self._put(f"/api/v1/tickets/{ticket_id}", payload)
 
     def create_article(self, ticket_id: int, payload: dict) -> dict:
-        return self._post(f"/api/v1/tickets/{ticket_id}/articles", payload)
+        # Endpoint Zammad : POST /api/v1/ticket_articles (ticket_id passé dans le corps).
+        # /api/v1/tickets/{id}/articles n'existe pas → 404 "This page doesn't exist."
+        return self._post("/api/v1/ticket_articles", {"ticket_id": ticket_id, **payload})
 
     def find_user_by_name(self, name: str) -> dict | None:
         try:

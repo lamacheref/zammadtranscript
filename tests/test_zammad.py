@@ -62,7 +62,9 @@ def test_create_article(mock_request):
     client.create_article(81, {"type": "note"})
     request = mock_request.call_args[0]
     assert request[0] == "POST"
-    assert "/articles" in request[1]
+    # Endpoint Zammad correct : POST /api/v1/ticket_articles avec ticket_id dans le corps
+    assert request[1] == "http://zammad.example.com/api/v1/ticket_articles"
+    assert mock_request.call_args.kwargs["json"] == {"ticket_id": 81, "type": "note"}
 
 
 @patch("app.zammad.httpx.request")
@@ -154,6 +156,7 @@ def test_get_article(mock_request):
     client = make_client()
     mock_request.return_value = FakeResponse({"id": 104})
     assert client.get_article(81, 104) == {"id": 104}
+    assert mock_request.call_args[0][1] == "http://zammad.example.com/api/v1/ticket_articles/104"
 
 
 @patch("app.zammad.httpx.request")
