@@ -8,3 +8,9 @@ ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["B018"]
+
+[tool.pytest.ini_options]
+# Rendre `app` et `scripts` importables quel que soit l'invocation de pytest
+# (nécessaire sous `uv run pytest`, qui n'ajoute pas le cwd au sys.path).
+pythonpath = ["."]
+testpaths = ["tests"]
