@@ -11,6 +11,17 @@
         header { text-align: center; margin-bottom: 2rem; }
         h1 { color: #2c3e50; font-size: 2rem; margin-bottom: 0.5rem; }
         .subtitle { color: #666; font-size: 1.1rem; }
+        .models { display: flex; justify-content: center; gap: 0.6rem; flex-wrap: wrap; margin-top: 1rem; }
+        .model-chip { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.7rem; border-radius: 20px; font-size: 0.8rem; font-weight: 600; border: 1px solid transparent; cursor: help; }
+        .model-chip .ico { font-weight: 700; }
+        .model-chip.ok { background: #e8f8f5; color: #1e8449; border-color: #aee6c8; }
+        .model-chip.ok .ico { color: #27ae60; }
+        .model-chip.warning { background: #fef9e7; color: #8a6d3b; border-color: #f7dc6f; }
+        .model-chip.warning .ico { color: #f1c40f; }
+        .model-chip.error { background: #fdf2f2; color: #c0392b; border-color: #f0b4b4; }
+        .model-chip.error .ico { color: #e74c3c; }
+        .model-refresh { background: none; border: none; color: #aaa; cursor: pointer; font-size: 0.9rem; }
+        .model-refresh:hover { color: #3498db; }
         .card { background: white; border-radius: 8px; padding: 2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
         .form-group { margin-bottom: 1.5rem; }
         label { display: block; font-weight: 600; margin-bottom: 0.5rem; color: #2c3e50; }
@@ -58,6 +69,9 @@
         <header>
             <h1>🎙️ Zammad Auto-Transcription</h1>
             <p class="subtitle">Transcription manuelle de messages vocaux</p>
+            <div class="models" id="models-bar">
+                <span class="model-chip"><span class="ico">…</span> Vérification des modèles…</span>
+            </div>
         </header>
 
         <div class="card">
@@ -96,6 +110,7 @@
         const resultTitle = document.getElementById('result-title');
         const stepsContainer = document.getElementById('steps-container');
         const detailsContainer = document.getElementById('details-container');
+        const modelsBar = document.getElementById('models-bar');
         const healthSpan = document.getElementById('health-status');
         const healthText = document.getElementById('health-text');
 
@@ -113,6 +128,34 @@
         }
         checkHealth();
         setInterval(checkHealth, 30000);
+
+        async function renderModels() {
+            try {
+                const res = await fetch('/ui/models');
+                if (!res.ok) return;
+                const { checks } = await res.json();
+                const ico = { ok: '✓', warning: '⚠', error: '✕' };
+                modelsBar.innerHTML = '';
+                Object.entries(checks).forEach(([key, c]) => {
+                    const cls = ['ok', 'warning', 'error'].includes(c.status) ? c.status : 'error';
+                    const el = document.createElement('span');
+                    el.className = `model-chip ${cls}`;
+                    el.title = `${c.label || key} — ${c.message || ''}`;
+                    el.textContent = `${ico[cls] || '?'} ${c.label || key}`;
+                    modelsBar.appendChild(el);
+                });
+                const refresh = document.createElement('button');
+                refresh.className = 'model-refresh';
+                refresh.title = 'Re-vérifier les modèles';
+                refresh.textContent = '↻';
+                refresh.addEventListener('click', renderModels);
+                modelsBar.appendChild(refresh);
+            } catch {
+                modelsBar.innerHTML = '<span class="model-chip error"><span class="ico">✕</span> Statut indisponible</span>';
+            }
+        }
+        renderModels();
+        setInterval(renderModels, 30000);
 
         function esc(s) {
             const div = document.createElement('div');
@@ -235,6 +278,7 @@
                     renderResult(status);
                     submitBtn.disabled = false;
                     submitBtn.textContent = 'Lancer la transcription';
+                    renderModels();
                     return;
                 }
                 attempts++;

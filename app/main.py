@@ -3,6 +3,7 @@ import hmac
 import logging
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -12,7 +13,12 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from .config import Settings, get_settings
 from .logging_config import configure_logging
 from .models import TranscribeRequest, WebhookPayload
-from .queue import enqueue_manual_transcription, enqueue_transcription, get_job_status
+from .queue import (
+    enqueue_manual_transcription,
+    enqueue_transcription,
+    get_job_status,
+    get_redis_connection,
+)
 
 logger = logging.getLogger("zammad-autotranscription")
 
@@ -77,6 +83,51 @@ def authorize(request: Request, authorization: str | None) -> None:
 def health():
     # Retourne 200 (vide pour HEAD) — compatible healthcheck wget -q --spider
     return JSONResponse(content={"status": "ok"})
+
+
+@app.get("/ui/models")
+def ui_models() -> JSONResponse:
+    """État des modèles (Ollama/Whisper) et services requis, affiché en barre d'icônes."""
+    from .title_generator import TitleGenerator
+    from .transcriber import Transcriber
+
+    checks: dict = {}
+
+    checks["ollama"] = {
+        "label": f"Ollama ({settings.ollama_model})",
+        **TitleGenerator(settings).available_models(),
+    }
+
+    checks["whisper"] = {
+        "label": f"Whisper ({settings.whisper_model})",
+        **Transcriber(settings).model_available(),
+    }
+
+    try:
+        get_redis_connection(settings).ping()
+        checks["redis"] = {"label": "Redis", "status": "ok", "message": "Redis joignable"}
+    except Exception as exc:
+        checks["redis"] = {
+            "label": "Redis",
+            "status": "error",
+            "message": f"Redis injoignable : {exc}",
+        }
+
+    try:
+        r = httpx.get(f"{settings.zammad_url.rstrip('/')}/", timeout=10)
+        checks["zammad"] = {
+            "label": "Zammad",
+            "status": "ok" if r.status_code < 500 else "error",
+            "message": f"Zammad répond (HTTP {r.status_code})",
+        }
+    except Exception as exc:
+        checks["zammad"] = {
+            "label": "Zammad",
+            "status": "error",
+            "message": f"Zammad injoignable : {exc}",
+        }
+
+    return JSONResponse(content={"checks": checks})
 
 
 @app.get("/ui", response_class=HTMLResponse)

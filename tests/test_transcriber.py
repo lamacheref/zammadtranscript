@@ -84,3 +84,36 @@ def test_model_lazy_loading():
         assert tr.model == "model-instance"
         assert tr._model == "model-instance"
         mock_cls.assert_called_once()
+
+
+def test_model_available_in_cache(tmp_path, monkeypatch):
+    monkeypatch.setenv("HF_HOME", str(tmp_path / "cache"))
+    (tmp_path / "cache" / "hub").mkdir(parents=True)
+
+    with patch("huggingface_hub.try_to_load_from_cache", return_value="/tmp/cache/model.bin"):
+        result = make_transcriber().model_available()
+
+    assert result["status"] == "ok"
+    assert "base" in result["message"]
+
+
+def test_model_available_not_cached_writable(tmp_path, monkeypatch):
+    monkeypatch.setenv("HF_HOME", str(tmp_path / "cache"))
+
+    with patch("huggingface_hub.try_to_load_from_cache", return_value=None):
+        result = make_transcriber().model_available()
+
+    assert result["status"] == "warning"
+    assert "téléchargé" in result["message"]
+
+
+def test_model_available_cache_not_writable(tmp_path, monkeypatch):
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    monkeypatch.setenv("HF_HOME", str(cache))
+
+    with patch("huggingface_hub.try_to_load_from_cache", return_value=None):
+        with patch("app.transcriber.os.access", return_value=False):
+            result = make_transcriber().model_available()
+
+    assert result["status"] == "error"

@@ -84,3 +84,27 @@ def test_client_lazy_loading():
         assert gen._client == "client-instance"
         mock_cls.assert_called_once()
         assert mock_cls.call_args.kwargs["host"] == "http://localhost:11434"
+
+
+@patch("app.title_generator.httpx.get")
+def test_available_models_present(mock_get):
+    mock_get.return_value = MagicMock(
+        json=lambda: {"models": [{"name": "llama3.2:latest"}, {"name": "qwen2.5:latest"}]}
+    )
+    assert make_generator().available_models()["status"] == "ok"
+
+
+@patch("app.title_generator.httpx.get")
+def test_available_models_missing(mock_get):
+    mock_get.return_value = MagicMock(json=lambda: {"models": [{"name": "qwen2.5:latest"}]})
+    result = make_generator().available_models()
+    assert result["status"] == "error"
+    assert "llama3.2" in result["message"]
+
+
+@patch("app.title_generator.httpx.get")
+def test_available_models_ollama_down(mock_get):
+    mock_get.side_effect = Exception("connection refused")
+    result = make_generator().available_models()
+    assert result["status"] == "error"
+    assert "injoignable" in result["message"].lower()

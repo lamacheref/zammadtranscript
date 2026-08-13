@@ -1,3 +1,4 @@
+import os
 import subprocess
 import tempfile
 from pathlib import Path
@@ -9,6 +10,14 @@ from .config import Settings
 
 class TranscriptionError(Exception):
     pass
+
+
+def _is_writable(path: Path) -> bool:
+    """Vérifie l'accès en écriture sur path (ou son ancêtre existant le plus proche)."""
+    current = path
+    while not current.exists() and current != current.parent:
+        current = current.parent
+    return os.access(current, os.W_OK)
 
 
 class Transcriber:
@@ -33,6 +42,31 @@ class Transcriber:
                     "(HF_HOME / .hf-cache)."
                 ) from exc
         return self._model
+
+    def model_available(self) -> dict:
+        """Vérifie (sans charger) si le modèle Whisper est présent dans le cache Hugging Face."""
+        model = self.settings.whisper_model
+        hf_home = Path(os.environ.get("HF_HOME") or Path.home() / ".cache" / "huggingface")
+        try:
+            from huggingface_hub import try_to_load_from_cache
+
+            cached = try_to_load_from_cache(f"Systran/faster-whisper-{model}", "model.bin")
+        except Exception:
+            cached = None
+        if cached and cached != "_CACHED_NO_EXIST":
+            return {
+                "status": "ok",
+                "message": f"Modèle Whisper '{model}' présent dans le cache ({hf_home})",
+            }
+        if not _is_writable(hf_home):
+            return {
+                "status": "error",
+                "message": f"Cache '{hf_home}' non accessible en écriture (droits ?)",
+            }
+        return {
+            "status": "warning",
+            "message": f"Modèle Whisper '{model}' absent du cache — téléchargé à la 1re transcription",
+        }
 
     def transcribe(self, audio_bytes: bytes, filename: str = "audio") -> str:
         ext = Path(filename).suffix.lower() or ".wav"

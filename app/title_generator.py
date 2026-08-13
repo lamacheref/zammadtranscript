@@ -1,6 +1,7 @@
 import json
 import logging
 
+import httpx
 import ollama
 from ollama import Client
 
@@ -41,6 +42,26 @@ class TitleGenerator:
         if self._client is None:
             self._client = ollama.Client(host=self.settings.ollama_url)
         return self._client
+
+    def available_models(self) -> dict:
+        """Vérifie que le modèle Ollama configuré est présent sur le serveur."""
+        model = self.settings.ollama_model
+        try:
+            response = httpx.get(f"{self.settings.ollama_url}/api/tags", timeout=10)
+            response.raise_for_status()
+            names = {m.get("name", "").split(":")[0] for m in response.json().get("models", [])}
+        except Exception as exc:
+            return {
+                "status": "error",
+                "message": f"Ollama injoignable ({self.settings.ollama_url}) : {exc}",
+            }
+        base = model.split(":")[0]
+        if base in names:
+            return {"status": "ok", "message": f"Modèle Ollama '{model}' présent"}
+        return {
+            "status": "error",
+            "message": f"Modèle Ollama '{model}' absent — exécuter : ollama pull {model}",
+        }
 
     def generate(self, transcript: str) -> dict:
         response = self.client.chat(

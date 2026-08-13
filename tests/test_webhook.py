@@ -1,7 +1,7 @@
 import hashlib
 import hmac
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -173,6 +173,32 @@ def test_ui_index():
     r = client.get("/ui")
     assert r.status_code == 200
     assert "Zammad" in r.text or "transcription" in r.text.lower()
+
+
+def test_ui_models():
+    """GET /ui/models renvoie l'état des modèles et services pour la barre d'icônes."""
+    with (
+        patch(
+            "app.title_generator.TitleGenerator.available_models",
+            return_value={"status": "ok", "message": "présent"},
+        ),
+        patch(
+            "app.transcriber.Transcriber.model_available",
+            return_value={"status": "warning", "message": "sera téléchargé"},
+        ),
+        patch("app.main.get_redis_connection") as mock_conn,
+        patch("app.main.httpx.get") as mock_get,
+    ):
+        mock_conn.return_value.ping.return_value = True
+        mock_get.return_value = MagicMock(status_code=200)
+        r = client.get("/ui/models")
+
+    assert r.status_code == 200
+    checks = r.json()["checks"]
+    assert checks["ollama"]["status"] == "ok"
+    assert checks["whisper"]["status"] == "warning"
+    assert checks["redis"]["status"] == "ok"
+    assert checks["zammad"]["status"] == "ok"
 
 
 def test_ui_transcribe_enqueues():
