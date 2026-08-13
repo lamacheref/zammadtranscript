@@ -115,7 +115,8 @@ jobs:
       - name: Determine registry
         id: registry
         run: |
-          echo "registry=${{ github.server_url }}" | sed 's#^https://##' >> "$GITHUB_OUTPUT"
+          server="${{ github.server_url }}"
+          echo "registry=${server#https://}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to Container Registry
         # Le GITHUB_TOKEN de Gitea Actions est refusé au push (reqPackageAccess) :
@@ -158,7 +159,8 @@ jobs:
       - name: Determine registry
         id: registry
         run: |
-          echo "registry=${{ github.server_url }}" | sed 's#^https://##' >> "$GITHUB_OUTPUT"
+          server="${{ github.server_url }}"
+          echo "registry=${server#https://}" >> "$GITHUB_OUTPUT"
 
       - name: Deploy to staging
         run: |
