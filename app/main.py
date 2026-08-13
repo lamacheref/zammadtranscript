@@ -126,17 +126,36 @@ async def ui_transcribe(
         logger.warning("Impossible de lire les articles du ticket %s : %s", ticket_id, exc)
 
     audio_attachment = None
+    audio_article = None
     for article in articles or []:
+        found = False
         for att in article.get("attachments", []):
             filename = (att.get("filename") or "").lower()
             if filename.endswith((".mp3", ".wav", ".ogg", ".m4a")):
                 audio_attachment = att
+                audio_article = article
+                found = True
                 break
-        if audio_attachment:
+        if found:
             break
 
     if not audio_attachment:
         raise HTTPException(status_code=422, detail="Aucun attachment audio trouvé dans le ticket")
+
+    # L'API Zammad ne renvoie pas d'URL dans l'attachment : la construire si possible.
+    # Format : /api/v1/ticket_attachment/<ticket>/<article>/<attachment>
+    if not (audio_attachment.get("url") or ""):
+        att_id = audio_attachment.get("id")
+        art_id = (audio_article or {}).get("id")
+        if att_id and art_id:
+            zammad_base = settings.zammad_url.rstrip("/")
+            audio_attachment = {
+                **audio_attachment,
+                "url": f"{zammad_base}/api/v1/ticket_attachment/{ticket_id}/{art_id}/{att_id}",
+            }
+
+    # Le corps de l'article (De: +33...) est nécessaire pour la résolution client par téléphone.
+    article_body = (audio_article or {}).get("body") or ""
 
     job_id = enqueue_transcription(
         {
@@ -148,9 +167,10 @@ async def ui_transcribe(
                 "customer": ticket.get("customer"),
             },
             "article": {
-                "id": audio_attachment.get("id"),
+                "id": (audio_article or {}).get("id"),
                 "ticket_id": ticket_id,
                 "type": "note",
+                "body": article_body,
                 "attachments": [audio_attachment],
             },
         }

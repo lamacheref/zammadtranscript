@@ -299,3 +299,48 @@ def test_ui_transcribe_resolves_ticket_by_number():
     processor.zammad.find_ticket_by_number.assert_called_once_with("202608069400166")
     # L'URL pointe vers l'ID interne
     assert data["ticket_url"].endswith("/#ticket/zoom/6475")
+
+
+def test_ui_transcribe_enqueues_body_and_constructed_attachment_url():
+    """Le payload UI doit inclure le body (De: +33...) et une URL d'attachment construite."""
+    with (
+        patch("app.processor.Processor") as mock_processor_cls,
+        patch("app.main.enqueue_transcription") as mock_enqueue,
+        patch(
+            "app.main.wait_for_job",
+            return_value={
+                "title": "Test",
+                "transcript": "Hello",
+                "customer_id": 42,
+                "customer_name": "John Doe",
+            },
+        ),
+    ):
+        processor = mock_processor_cls.return_value
+        processor.zammad.get_ticket.return_value = {
+            "id": 6475,
+            "number": "202608069400166",
+            "title": "Nouveau message vocal",
+            "customer_id": 8,
+            "customer": {},
+        }
+        processor.zammad.get_ticket_articles.return_value = [
+            {
+                "id": 104,
+                "body": "De: +33 6 12 34 56 78<br>Appel manqué",
+                "attachments": [
+                    {
+                        "id": 174,
+                        "filename": "voicemail.mp3",
+                    }
+                ],
+            }
+        ]
+        r = client.post("/ui/transcribe", json={"ticket_id": 6475})
+
+    assert r.status_code == 200
+    payload = mock_enqueue.call_args.args[0]
+    assert payload["article"]["id"] == 104
+    assert "De: +33 6 12 34 56 78" in payload["article"]["body"]
+    att = payload["article"]["attachments"][0]
+    assert att["url"].endswith("/api/v1/ticket_attachment/6475/104/174")

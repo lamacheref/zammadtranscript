@@ -131,10 +131,19 @@ class Processor:
         ticket_id = payload.ticket.id
         article = payload.article
         article_id = article.id
-        done, _marker = self._load_state(ticket_id, article_id)
+        done, state = self._load_state(ticket_id, article_id)
         if done:
-            logger.info("Ticket %s déjà traité — idempotence.", ticket_id)
-            return {"idempotent": True}
+            if state.get("transcript"):
+                # Une vraie transcription existe déjà : la réutiliser (affichage UI).
+                logger.info("Ticket %s déjà transcrit — réutilisation du résultat.", ticket_id)
+                return {**state, "idempotent": True}
+            # État sans transcription (no_audio, échec, marqueur vide) : on retranscrit,
+            # même si le ticket a déjà été traité (ex: 35e tentative).
+            logger.info(
+                "Ticket %s précédemment marqué '%s' sans transcription — retranscription.",
+                ticket_id,
+                state.get("status") or "traité",
+            )
 
         audio = self._find_audio_attachment(payload)
         if audio is None or not (audio.url or ""):

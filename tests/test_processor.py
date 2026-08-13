@@ -108,6 +108,51 @@ def test_idempotence_prevents_reprocess(tmp_path):
     assert result["idempotent"] is True
 
 
+def test_idempotence_reuses_stored_transcript(tmp_path):
+    """Le deuxième appel renvoie le résultat stocké, pas des données null."""
+    processor = make_processor(tmp_path)
+
+    with (
+        patch.object(processor.zammad, "get_attachment", return_value=b"x"),
+        patch.object(processor.transcriber, "transcribe", return_value="texte cool"),
+        patch.object(
+            processor.titles, "generate", return_value={"title": "Titre", "customer_name": "Alice"}
+        ),
+        patch.object(processor.zammad, "update_ticket", return_value={}),
+        patch.object(processor.zammad, "create_article", return_value={}),
+    ):
+        processor.process(payload())
+        result = processor.process(payload())
+
+    assert result["idempotent"] is True
+    assert result["transcript"] == "texte cool"
+    assert result["title"] == "Titre"
+    assert result["customer_name"] == "Alice"
+
+
+def test_no_audio_state_does_not_block_retranscription(tmp_path):
+    """Un état 'no_audio' (sans transcription) ne doit pas bloquer une nouvelle tentative."""
+    processor = make_processor(tmp_path)
+    payload_obj = payload()
+    article_id = payload_obj.article.id
+    processor._mark_done(payload_obj.ticket.id, article_id, {"status": "no_audio"})
+
+    with (
+        patch.object(processor.zammad, "get_attachment", return_value=b"x"),
+        patch.object(processor.transcriber, "transcribe", return_value="transcrit enfin"),
+        patch.object(
+            processor.titles, "generate", return_value={"title": "T", "customer_name": None}
+        ),
+        patch.object(processor.zammad, "update_ticket", return_value={}),
+        patch.object(processor.zammad, "create_article", return_value={}),
+    ):
+        result = processor.process(payload_obj)
+
+    assert result.get("idempotent") is not True
+    assert result["success"] is True
+    assert result["transcript"] == "transcrit enfin"
+
+
 def test_retries_on_error(tmp_path):
     processor = make_processor(tmp_path)
 
