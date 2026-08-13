@@ -1,4 +1,10 @@
-name: CI/CD (GitHub)
+name: CI/CD (Gitea)
+
+# Workflow spécifique à Gitea. Dès que .gitea/workflows/ existe, Gitea
+# ignore .github/workflows/ (pas de double exécution).
+# Différence clé avec GitHub : le runner est bare-metal (Debian 13) et
+# actions/setup-python échoue ("Cannot find: node in PATH"). On utilise UV
+# (déjà installé sur le runner) pour gérer Python 3.12 et les dépendances.
 
 on:
   push:
@@ -9,45 +15,45 @@ on:
     types: [published]
 
 env:
-  REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   test:
     name: Test
+    # Adapter ce label à celui enregistré pour votre runner act_runner.
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-          cache: "pip"
+      - name: Set up Python with UV
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv python install 3.12
+          uv venv --python 3.12
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest pytest-asyncio
+          export PATH="$HOME/.local/bin:$PATH"
+          uv pip install -r requirements.txt
+          uv pip install pytest pytest-asyncio
 
       - name: Lint
         run: |
-          python -m ruff check app/ scripts/ tests/
-          python -m ruff format --check app/ scripts/ tests/
+          export PATH="$HOME/.local/bin:$PATH"
+          uv run ruff check app/ scripts/ tests/
+          uv run ruff format --check app/ scripts/ tests/
 
       - name: Run tests with coverage
         run: |
-          python -m pytest --cov=app --cov-fail-under=80 --cov-report=term-missing tests/ -v
+          export PATH="$HOME/.local/bin:$PATH"
+          uv run pytest --cov=app --cov-fail-under=80 --cov-report=term-missing tests/ -v
 
   version:
     name: Bump version
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -72,8 +78,8 @@ jobs:
             echo "Tag v${{ steps.bump.outputs.new }} existe déjà, skip."
             exit 0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "gitea-actions[bot]"
+          git config user.email "gitea-actions[bot]@noreply.gitea.smiden.eu"
           git add VERSION
           git commit -m "chore(release): bump version to ${{ steps.bump.outputs.new }}"
           git tag "v${{ steps.bump.outputs.new }}"
@@ -85,34 +91,46 @@ jobs:
     needs: test
     if: github.event_name == 'push' || github.event_name == 'release'
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
+      - name: Set up Python with UV
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv python install 3.12
+          uv venv --python 3.12
+
       - name: Compute version
         id: version
-        run: echo "VERSION=$(python3 scripts/bump_version.py)" >> "$GITHUB_OUTPUT"
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "VERSION=$(uv run python scripts/bump_version.py)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Log in to GitHub Container Registry
+      - name: Determine registry
+        id: registry
+        run: |
+          echo "registry=${{ github.server_url }}" | sed 's#^https://##' >> "$GITHUB_OUTPUT"
+
+      - name: Log in to Container Registry
+        # Le GITHUB_TOKEN de Gitea Actions est refusé au push (reqPackageAccess) :
+        # créer un secret REGISTRY_TOKEN = PAT Gitea avec l'accès "write:package".
         uses: docker/login-action@v4
         with:
-          registry: ghcr.io
+          registry: ${{ steps.registry.outputs.registry }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.REGISTRY_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata for Docker
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ steps.registry.outputs.registry }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
             type=sha,prefix=
@@ -136,9 +154,13 @@ jobs:
     needs: build
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    environment: staging
     steps:
+      - name: Determine registry
+        id: registry
+        run: |
+          echo "registry=${{ github.server_url }}" | sed 's#^https://##' >> "$GITHUB_OUTPUT"
+
       - name: Deploy to staging
         run: |
           echo "Deploy to staging server via SSH or orchestration tool"
-          echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          echo "Image: ${{ steps.registry.outputs.registry }}/${{ env.IMAGE_NAME }}:latest"
