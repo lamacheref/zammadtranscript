@@ -392,6 +392,9 @@ class Processor:
             "internal": internal,
             "body": body,
         }
+        payload["body"] = (
+            f"Transcription par ZammadTranscript - Attention à la qualité\n\n{body.strip()}"
+        )
         if subject:
             payload["subject"] = subject
         if reply_to is not None:

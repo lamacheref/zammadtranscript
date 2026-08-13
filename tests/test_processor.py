@@ -346,7 +346,9 @@ def test_commit_manual(tmp_path):
     assert result["customer_name"] == "Alice Dupont"
     assert mock_update.call_args.args == (6475, {"title": "Titre corrigé", "customer_id": 42})
     article_payload = mock_create.call_args.args[1]
-    assert article_payload["body"] == "bonjour test"
+    assert article_payload["body"] == (
+        "Transcription par ZammadTranscript - Attention à la qualité\n\nbonjour test"
+    )
     assert article_payload["type"] == "note"
     assert article_payload["sender"] == "Agent"
     assert article_payload["content_type"] == "text/plain"
