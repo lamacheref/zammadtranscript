@@ -175,172 +175,73 @@ def test_ui_index():
     assert "Zammad" in r.text or "transcription" in r.text.lower()
 
 
-def test_ui_transcribe_no_audio():
-    with patch("app.processor.Processor") as mock_processor_cls:
-        processor = mock_processor_cls.return_value
-        processor.zammad.get_ticket.return_value = {
-            "id": 81,
-            "number": "10081",
-            "title": "T",
-            "customer_id": 8,
-            "customer": {},
-        }
-        processor.zammad.get_ticket_articles.return_value = [
-            {"attachments": [{"filename": "doc.pdf"}]}
-        ]
-        r = client.post("/ui/transcribe", json={"ticket_id": 81})
-
-    assert r.status_code == 422
-    assert "audio" in r.json()["detail"].lower()
-
-
-def test_ui_transcribe_ticket_not_found():
-    with patch("app.processor.Processor") as mock_processor_cls:
-        processor = mock_processor_cls.return_value
-        processor.zammad.get_ticket.side_effect = Exception("404")
-        processor.zammad.find_ticket_by_number.return_value = None
-        r = client.post("/ui/transcribe", json={"ticket_id": 999})
-
-    assert r.status_code == 404
-
-
-def test_ui_transcribe_success():
+def test_ui_transcribe_enqueues():
+    """L'endpoint manuel enfile un job et renvoie son job_id (202)."""
     with (
-        patch("app.processor.Processor") as mock_processor_cls,
-        patch("app.main.enqueue_transcription", return_value="job-ui"),
-        patch(
-            "app.main.wait_for_job",
-            return_value={
-                "title": "Test",
-                "transcript": "Hello",
-                "customer_id": 42,
-                "customer_name": "John Doe",
-            },
-        ),
+        patch("app.main.enqueue_manual_transcription", return_value="job-ui") as mock_enqueue,
     ):
-        processor = mock_processor_cls.return_value
-        processor.zammad.get_ticket.return_value = {
-            "id": 81,
-            "number": "10081",
-            "title": "T",
-            "customer_id": 8,
-            "customer": {},
-        }
-        processor.zammad.get_ticket_articles.return_value = [
-            {
-                "attachments": [
-                    {
-                        "id": 174,
-                        "filename": "voicemail.mp3",
-                        "url": "http://zammad.example.com/dl/audio",
-                    }
-                ]
-            }
-        ]
-        r = client.post("/ui/transcribe", json={"ticket_id": 81})
+        r = client.post("/ui/transcribe", json={"ticket_id": 202608069400166})
+
+    assert r.status_code == 202
+    data = r.json()
+    assert data["status"] == "accepted"
+    assert data["job_id"] == "job-ui"
+    assert data["ticket_input"] == 202608069400166
+    mock_enqueue.assert_called_once_with(202608069400166)
+
+
+def test_ui_status_running():
+    """GET /ui/status renvoie les étapes intermédiaires du job en cours."""
+    steps = [
+        {"step": "ticket", "label": "Recherche du ticket", "status": "ok", "message": "Ticket #81"},
+        {
+            "step": "article",
+            "label": "Recherche de l'article contenant l'audio",
+            "status": "ok",
+            "message": "voicemail.mp3",
+        },
+        {
+            "step": "download",
+            "label": "Téléchargement de l'audio",
+            "status": "running",
+            "message": "Téléchargement de l'audio…",
+        },
+    ]
+    with patch(
+        "app.main.get_job_status",
+        return_value={"job_id": "job-x", "status": "running", "steps": steps, "result": {}},
+    ):
+        r = client.get("/ui/status/job-x")
 
     assert r.status_code == 200
     data = r.json()
-    assert data["success"] is True
-    assert data["ticket_id"] == 81
-    assert data["title"] == "Test"
-    assert data["transcript"] == "Hello"
-    assert data["customer_id"] == 42
-    assert data["customer_name"] == "John Doe"
-    assert data["ticket_url"].endswith("/#ticket/zoom/81")
+    assert data["status"] == "running"
+    assert data["steps"] == steps
+    assert data["result"] == {}
 
 
-def test_ui_transcribe_resolves_ticket_by_number():
-    """L'utilisateur saisit le numéro (ex: 202608069400166) au lieu de l'ID interne."""
-    with (
-        patch("app.processor.Processor") as mock_processor_cls,
-        patch("app.main.enqueue_transcription", return_value="job-num"),
-        patch(
-            "app.main.wait_for_job",
-            return_value={
-                "title": "Résolu",
-                "transcript": "Texte",
-                "customer_id": 100,
-                "customer_name": "Client X",
-            },
-        ),
+def test_ui_status_finished_with_ticket_url():
+    """GET /ui/status renvoie le résultat final + l'URL du ticket."""
+    result = {
+        "success": True,
+        "ticket_id": 6475,
+        "title": "Test",
+        "transcript": "Hello",
+        "customer_name": "John Doe",
+    }
+    with patch(
+        "app.main.get_job_status",
+        return_value={
+            "job_id": "job-x",
+            "status": "finished",
+            "steps": [],
+            "result": result,
+        },
     ):
-        processor = mock_processor_cls.return_value
-        # get_ticket par ID interne échoue (car l'utilisateur a donné le numéro)
-        processor.zammad.get_ticket.side_effect = Exception("404")
-        # find_ticket_by_number retrouve le ticket avec son ID interne
-        processor.zammad.find_ticket_by_number.return_value = {
-            "id": 6475,
-            "number": "202608069400166",
-            "title": "Nouveau message vocal",
-            "customer_id": 100,
-            "customer": {},
-        }
-        processor.zammad.get_ticket_articles.return_value = [
-            {
-                "attachments": [
-                    {
-                        "id": 174,
-                        "filename": "voicemail.mp3",
-                        "url": "http://zammad.example.com/dl/audio",
-                    }
-                ]
-            }
-        ]
-        r = client.post(
-            "/ui/transcribe",
-            json={"ticket_id": 202608069400166},
-        )
+        r = client.get("/ui/status/job-x")
 
     assert r.status_code == 200
     data = r.json()
-    assert data["success"] is True
-    assert data["ticket_id"] == 6475
-    processor.zammad.find_ticket_by_number.assert_called_once_with("202608069400166")
-    # L'URL pointe vers l'ID interne
-    assert data["ticket_url"].endswith("/#ticket/zoom/6475")
-
-
-def test_ui_transcribe_enqueues_body_and_constructed_attachment_url():
-    """Le payload UI doit inclure le body (De: +33...) et une URL d'attachment construite."""
-    with (
-        patch("app.processor.Processor") as mock_processor_cls,
-        patch("app.main.enqueue_transcription") as mock_enqueue,
-        patch(
-            "app.main.wait_for_job",
-            return_value={
-                "title": "Test",
-                "transcript": "Hello",
-                "customer_id": 42,
-                "customer_name": "John Doe",
-            },
-        ),
-    ):
-        processor = mock_processor_cls.return_value
-        processor.zammad.get_ticket.return_value = {
-            "id": 6475,
-            "number": "202608069400166",
-            "title": "Nouveau message vocal",
-            "customer_id": 8,
-            "customer": {},
-        }
-        processor.zammad.get_ticket_articles.return_value = [
-            {
-                "id": 104,
-                "body": "De: +33 6 12 34 56 78<br>Appel manqué",
-                "attachments": [
-                    {
-                        "id": 174,
-                        "filename": "voicemail.mp3",
-                    }
-                ],
-            }
-        ]
-        r = client.post("/ui/transcribe", json={"ticket_id": 6475})
-
-    assert r.status_code == 200
-    payload = mock_enqueue.call_args.args[0]
-    assert payload["article"]["id"] == 104
-    assert "De: +33 6 12 34 56 78" in payload["article"]["body"]
-    att = payload["article"]["attachments"][0]
-    assert att["url"].endswith("/api/v1/ticket_attachment/6475/104/174")
+    assert data["status"] == "finished"
+    assert data["result"]["ticket_id"] == 6475
+    assert data["result"]["ticket_url"].endswith("/#ticket/zoom/6475")

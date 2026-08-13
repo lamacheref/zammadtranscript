@@ -6,7 +6,7 @@ from pathlib import Path
 
 from . import DATA_DIR
 from .config import Settings
-from .models import WebhookPayload
+from .models import Attachment, WebhookPayload
 from .postprocess import clean_transcript
 from .title_generator import TitleGenerator
 from .transcriber import Transcriber
@@ -118,6 +118,28 @@ PHONE_PATTERN = re.compile(r"De:\s*([+\d\s().-]{8,})", re.IGNORECASE)
 MAX_RETRIES = 3
 RETRY_BACKOFF = (10, 30, 60)
 
+# Étapes du pipeline, visibles dans l'UI manuelle.
+STEP_LABELS = {
+    "ticket": "Recherche du ticket",
+    "article": "Recherche de l'article contenant l'audio",
+    "download": "Téléchargement de l'audio",
+    "transcription": "Transcription",
+}
+
+
+def _step(steps: dict, progress, name: str, status: str, message=None, error=None) -> dict:
+    entry = {
+        "step": name,
+        "label": STEP_LABELS.get(name, name),
+        "status": status,
+        "message": message,
+        "error": error,
+    }
+    steps[name] = entry
+    if progress:
+        progress(name, dict(entry))
+    return entry
+
 
 class Processor:
     def __init__(self, settings: Settings, state_dir: Path | None = None):
@@ -127,18 +149,34 @@ class Processor:
         self.titles = TitleGenerator(settings)
         self.state_dir = state_dir or (DATA_DIR / "state")
 
-    def process(self, payload: WebhookPayload) -> dict:
+    def process(
+        self,
+        payload: WebhookPayload,
+        progress=None,
+        retries: bool = True,
+        steps: dict | None = None,
+    ) -> dict:
+        steps = steps or {}
         ticket_id = payload.ticket.id
         article = payload.article
         article_id = article.id
+
+        if "ticket" not in steps:
+            _step(steps, progress, "ticket", "ok", message=f"Ticket #{ticket_id}")
+
+        # Idempotence : si une vraie transcription existe déjà, la réutiliser.
         done, state = self._load_state(ticket_id, article_id)
         if done:
             if state.get("transcript"):
-                # Une vraie transcription existe déjà : la réutiliser (affichage UI).
                 logger.info("Ticket %s déjà transcrit — réutilisation du résultat.", ticket_id)
-                return {**state, "idempotent": True}
-            # État sans transcription (no_audio, échec, marqueur vide) : on retranscrit,
-            # même si le ticket a déjà été traité (ex: 35e tentative).
+                _step(
+                    steps,
+                    progress,
+                    "transcription",
+                    "ok",
+                    message="Transcription existante réutilisée",
+                )
+                return {**state, "idempotent": True, "steps": list(steps.values())}
             logger.info(
                 "Ticket %s précédemment marqué '%s' sans transcription — retranscription.",
                 ticket_id,
@@ -147,16 +185,40 @@ class Processor:
 
         audio = self._find_audio_attachment(payload)
         if audio is None or not (audio.url or ""):
-            self._mark_done(ticket_id, article_id, {"status": "no_audio"})
             logger.warning("Ticket %s sans attachment audio.", ticket_id)
-            return {"status": "no_audio"}
+            _step(
+                steps,
+                progress,
+                "article",
+                "error",
+                error="Aucun attachment audio trouvé dans le ticket",
+            )
+            self._mark_done(ticket_id, article_id, {"status": "no_audio"})
+            return {"success": False, "steps": list(steps.values())}
+        if "article" not in steps:
+            _step(steps, progress, "article", "ok", message=audio.filename)
+        else:
+            # Déjà rapporté par le pipeline manuel : on met à jour sans re-notifier.
+            steps["article"].update(status="ok", message=audio.filename, error=None)
 
+        _step(steps, progress, "download", "running", message="Téléchargement de l'audio…")
         for attempt in range(1, MAX_RETRIES + 1):
+            step_name = "download"
             try:
-                result = self._run_pipeline(ticket_id, article_id, payload, audio.url)
+                audio_bytes = self.zammad.get_attachment(audio.url)
+                _step(
+                    steps,
+                    progress,
+                    "download",
+                    "ok",
+                    message=f"{len(audio_bytes)} octets téléchargés",
+                )
+                step_name = "transcription"
+                result = self._run_pipeline(ticket_id, article_id, payload, audio_bytes)
                 self._mark_done(ticket_id, article_id, result)
                 logger.info("Ticket %s traité avec succès.", ticket_id)
-                return result
+                _step(steps, progress, "transcription", "ok", message="Transcription terminée")
+                return {**result, "steps": list(steps.values())}
             except Exception as exc:
                 logger.error(
                     "Tentative %s/%s échouée pour le ticket %s : %s",
@@ -165,15 +227,125 @@ class Processor:
                     ticket_id,
                     exc,
                 )
-                if attempt == MAX_RETRIES:
+                _step(steps, progress, step_name, "error", error=str(exc))
+                if not retries or attempt == MAX_RETRIES:
                     self._mark_failed(ticket_id, article_id, str(exc))
-                    raise
+                    return {"success": False, "steps": list(steps.values()), "error": str(exc)}
+                _step(
+                    steps,
+                    progress,
+                    step_name,
+                    "running",
+                    message=f"Nouvelle tentative ({attempt + 1}/{MAX_RETRIES})…",
+                )
                 time.sleep(RETRY_BACKOFF[attempt - 1])
 
-    def _run_pipeline(
-        self, ticket_id: int, article_id: int | None, payload: WebhookPayload, audio_url: str
+    def process_manual(
+        self,
+        ticket_input: int | str,
+        progress=None,
     ) -> dict:
-        audio_bytes = self.zammad.get_attachment(audio_url)
+        """Pipeline manuel (UI) : recherche ticket → article audio → download → transcription.
+
+        Chaque étape est rapportée via `progress(name, entry)` et le résultat contient
+        la liste des étapes avec leur statut / erreur.
+        """
+        steps: dict = {}
+        ticket = None
+        try:
+            ticket = self.zammad.get_ticket(int(ticket_input))
+        except Exception:
+            ticket = None
+        if ticket is None:
+            try:
+                found = self.zammad.find_ticket_by_number(str(ticket_input))
+                if found and found.get("id"):
+                    ticket = found
+            except Exception as exc:
+                _step(
+                    steps,
+                    progress,
+                    "ticket",
+                    "error",
+                    error=f"Recherche du ticket {ticket_input} impossible : {exc}",
+                )
+                return {"success": False, "steps": list(steps.values())}
+        if ticket is None:
+            _step(steps, progress, "ticket", "error", error=f"Ticket {ticket_input} introuvable")
+            return {"success": False, "steps": list(steps.values())}
+
+        ticket_id = int(ticket["id"])
+        _step(steps, progress, "ticket", "ok", message=f"Ticket #{ticket_id}")
+
+        audio, audio_article = self._find_audio_article(ticket_id, progress, steps)
+        if audio is None:
+            return {"success": False, "steps": list(steps.values())}
+
+        payload = WebhookPayload.model_validate(
+            {
+                "ticket": {
+                    "id": ticket.get("id"),
+                    "number": ticket.get("number"),
+                    "title": ticket.get("title"),
+                    "customer_id": ticket.get("customer_id"),
+                    "customer": ticket.get("customer"),
+                },
+                "article": {
+                    "id": (audio_article or {}).get("id"),
+                    "ticket_id": ticket_id,
+                    "type": "note",
+                    "body": (audio_article or {}).get("body") or "",
+                    "attachments": [audio],
+                },
+            }
+        )
+        return self.process(payload, progress=progress, retries=False, steps=steps)
+
+    def _find_audio_article(self, ticket_id: int, progress=None, steps: dict | None = None):
+        """Cherche l'article contenant l'audio via l'API Zammad et construit l'URL."""
+        try:
+            articles = self.zammad.get_ticket_articles(ticket_id)
+        except Exception as exc:
+            _step(
+                steps,
+                progress,
+                "article",
+                "error",
+                error=f"Impossible de lire les articles du ticket {ticket_id} : {exc}",
+            )
+            return None, None
+
+        for article in articles or []:
+            for att in article.get("attachments", []):
+                name = (att.get("filename") or "").lower()
+                if not name.endswith((".mp3", ".wav", ".ogg", ".m4a")):
+                    continue
+                # L'API Zammad ne renvoie pas d'URL : la construire.
+                if not (att.get("url") or ""):
+                    att_id = att.get("id")
+                    art_id = article.get("id")
+                    if att_id and art_id:
+                        base = self.settings.zammad_url.rstrip("/")
+                        att = {
+                            **att,
+                            "url": f"{base}/api/v1/ticket_attachment/{ticket_id}/{art_id}/{att_id}",
+                        }
+                audio = Attachment.model_validate(att)
+                _step(steps, progress, "article", "ok", message=att.get("filename"))
+                return audio, article
+
+        _step(
+            steps,
+            progress,
+            "article",
+            "error",
+            error="Aucun attachment audio trouvé dans le ticket",
+        )
+        return None, None
+
+    def _run_pipeline(
+        self, ticket_id: int, article_id: int | None, payload: WebhookPayload, audio_bytes: bytes
+    ) -> dict:
         transcript = self.transcriber.transcribe(audio_bytes)
         transcript = clean_transcript(transcript)
         if not transcript:

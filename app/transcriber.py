@@ -19,12 +19,19 @@ class Transcriber:
     @property
     def model(self) -> WhisperModel:
         if self._model is None:
-            self._model = WhisperModel(
-                self.settings.whisper_model,
-                device=self.settings.whisper_device,
-                compute_type=self.settings.whisper_compute_type,
-                cpu_threads=self.settings.whisper_cpu_threads,
-            )
+            try:
+                self._model = WhisperModel(
+                    self.settings.whisper_model,
+                    device=self.settings.whisper_device,
+                    compute_type=self.settings.whisper_compute_type,
+                    cpu_threads=self.settings.whisper_cpu_threads,
+                )
+            except Exception as exc:
+                raise TranscriptionError(
+                    f"Chargement du modèle Whisper impossible ({exc}). "
+                    "Vérifiez que le répertoire de cache est accessible en écriture "
+                    "(HF_HOME / .hf-cache)."
+                ) from exc
         return self._model
 
     def transcribe(self, audio_bytes: bytes, filename: str = "audio") -> str:

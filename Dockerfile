@@ -35,7 +35,7 @@ COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/pytho
 WORKDIR /app
 
 RUN useradd --create-home --shell /bin/bash appuser && \
-    mkdir -p /app/_data/state && \
+    mkdir -p /app/_data/state /app/.hf-cache && \
     chown -R appuser:appuser /app
 
 COPY --chown=appuser:appuser app/ ./app/

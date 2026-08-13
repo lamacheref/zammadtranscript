@@ -12,7 +12,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from .config import Settings, get_settings
 from .logging_config import configure_logging
 from .models import TranscribeRequest, WebhookPayload
-from .queue import enqueue_transcription, wait_for_job
+from .queue import enqueue_manual_transcription, enqueue_transcription, get_job_status
 
 logger = logging.getLogger("zammad-autotranscription")
 
@@ -84,132 +84,31 @@ async def ui_index(request: Request):
     return templates.TemplateResponse(request, "index.html", {})
 
 
-@app.post("/ui/transcribe")
-async def ui_transcribe(
-    request: Request,
-    payload: TranscribeRequest,
-    wait: bool = True,
-) -> JSONResponse:
-    from .processor import Processor
-
-    processor = Processor(settings)
-
-    # Le payload peut contenir l'ID interne OU le numéro de ticket (ex: 202608069400166)
-    ticket_id = payload.ticket_id
-    ticket = None
-
-    # 1) Essayer l'ID interne directement
-    try:
-        ticket = processor.zammad.get_ticket(ticket_id)
-    except Exception:
-        ticket = None
-
-    # 2) Si échec, chercher par numéro (le champ 'number' de Zammad)
-    if ticket is None:
-        try:
-            found = processor.zammad.find_ticket_by_number(str(ticket_id))
-            if found and found.get("id"):
-                ticket = found
-                ticket_id = found["id"]
-                logger.info("Ticket résolu par numéro : %s → ID %s", payload.ticket_id, ticket_id)
-        except Exception as exc:
-            logger.exception("Erreur recherche ticket par numéro %s : %s", payload.ticket_id, exc)
-
-    if ticket is None:
-        raise HTTPException(status_code=404, detail=f"Ticket {payload.ticket_id} introuvable")
-
-    # Récupérer les articles (protégé : un 4xx ne doit pas faire planter l'endpoint)
-    articles = []
-    try:
-        articles = processor.zammad.get_ticket_articles(ticket_id)
-    except Exception as exc:
-        logger.warning("Impossible de lire les articles du ticket %s : %s", ticket_id, exc)
-
-    audio_attachment = None
-    audio_article = None
-    for article in articles or []:
-        found = False
-        for att in article.get("attachments", []):
-            filename = (att.get("filename") or "").lower()
-            if filename.endswith((".mp3", ".wav", ".ogg", ".m4a")):
-                audio_attachment = att
-                audio_article = article
-                found = True
-                break
-        if found:
-            break
-
-    if not audio_attachment:
-        raise HTTPException(status_code=422, detail="Aucun attachment audio trouvé dans le ticket")
-
-    # L'API Zammad ne renvoie pas d'URL dans l'attachment : la construire si possible.
-    # Format : /api/v1/ticket_attachment/<ticket>/<article>/<attachment>
-    if not (audio_attachment.get("url") or ""):
-        att_id = audio_attachment.get("id")
-        art_id = (audio_article or {}).get("id")
-        if att_id and art_id:
-            zammad_base = settings.zammad_url.rstrip("/")
-            audio_attachment = {
-                **audio_attachment,
-                "url": f"{zammad_base}/api/v1/ticket_attachment/{ticket_id}/{art_id}/{att_id}",
-            }
-
-    # Le corps de l'article (De: +33...) est nécessaire pour la résolution client par téléphone.
-    article_body = (audio_article or {}).get("body") or ""
-
-    job_id = enqueue_transcription(
-        {
-            "ticket": {
-                "id": ticket.get("id"),
-                "number": ticket.get("number"),
-                "title": ticket.get("title"),
-                "customer_id": ticket.get("customer_id"),
-                "customer": ticket.get("customer"),
-            },
-            "article": {
-                "id": (audio_article or {}).get("id"),
-                "ticket_id": ticket_id,
-                "type": "note",
-                "body": article_body,
-                "attachments": [audio_attachment],
-            },
-        }
-    )
-
-    logger.info("Transcription manuelle ticket %s enfile (job %s)", ticket_id, job_id)
-
-    if not wait:
-        return JSONResponse(
-            status_code=202,
-            content={"status": "accepted", "ticket_id": ticket_id, "job_id": job_id},
-        )
-
-    # Attendre la fin du job (mode synchrone pour l'UI)
-    try:
-        result = wait_for_job(job_id, settings, timeout=300)
-    except TimeoutError:
-        raise HTTPException(
-            status_code=504, detail="Timeout: le job n'a pas terminé à temps"
-        ) from None
-    except Exception as exc:
-        logger.exception("Erreur lors du traitement du job %s : %s", job_id, exc)
-        raise HTTPException(status_code=500, detail=f"Erreur de traitement: {exc}") from None
-
-    # Construire l'URL du ticket Zammad (avec l'ID interne résolu)
-    zammad_base = settings.zammad_url.rstrip("/")
-    ticket_url = f"{zammad_base}/#ticket/zoom/{ticket_id}"
-
+@app.post("/ui/transcribe", status_code=202)
+async def ui_transcribe(payload: TranscribeRequest) -> JSONResponse:
+    """Enfile une transcription manuelle et renvoie le job_id (l'UI interroge /ui/status)."""
+    ticket_input = payload.ticket_id
+    job_id = enqueue_manual_transcription(ticket_input)
+    logger.info("Transcription manuelle %s enfile (job %s)", ticket_input, job_id)
     return JSONResponse(
-        content={
-            "success": True,
-            "ticket_id": ticket_id,
-            "ticket_url": ticket_url,
-            "title": result.get("title"),
-            "transcript": result.get("transcript"),
-            "customer_id": result.get("customer_id"),
-            "customer_name": result.get("customer_name"),
-        }
+        status_code=202,
+        content={"status": "accepted", "ticket_input": ticket_input, "job_id": job_id},
     )
+
+
+@app.get("/ui/status/{job_id}")
+async def ui_status(job_id: str) -> JSONResponse:
+    """État d'un job de transcription manuelle : étapes + statut + résultat."""
+    status = get_job_status(job_id)
+    result = status.get("result") or {}
+    if result.get("ticket_id") and not result.get("ticket_url"):
+        zammad_base = settings.zammad_url.rstrip("/")
+        result = {
+            **result,
+            "ticket_url": f"{zammad_base}/#ticket/zoom/{result['ticket_id']}",
+        }
+    status["result"] = result
+    return JSONResponse(content=status)
 
 
 @app.post("/webhook/zammad")

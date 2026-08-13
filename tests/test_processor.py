@@ -1,7 +1,5 @@
 from unittest.mock import patch
 
-import pytest
-
 from app.config import Settings
 from app.models import WebhookPayload
 from app.processor import Processor
@@ -87,7 +85,10 @@ def test_no_audio_marked(tmp_path):
     ]
 
     result = processor.process(p)
-    assert result["status"] == "no_audio"
+    assert result["success"] is False
+    step = result["steps"][-1]
+    assert step["step"] == "article"
+    assert step["status"] == "error"
 
 
 def test_idempotence_prevents_reprocess(tmp_path):
@@ -166,14 +167,148 @@ def test_retries_on_error(tmp_path):
         patch.object(processor.zammad, "get_attachment", return_value=b"x"),
         patch.object(processor.transcriber, "transcribe", failing_transcribe),
         patch("app.processor.time.sleep"),
-        pytest.raises(ZammadError),
     ):
-        processor.process(payload())
+        result = processor.process(payload())
 
     assert calls["n"] == 3
+    assert result["success"] is False
+    transcription_step = [s for s in result["steps"] if s["step"] == "transcription"][0]
+    assert transcription_step["status"] == "error"
+    assert "boom" in transcription_step["error"]
 
 
-def test_empty_transcript_raises(tmp_path):
+def test_no_retries_manual_mode(tmp_path):
+    """En mode manuel (retries=False), on échoue immédiatement avec l'erreur sur la bonne étape."""
+    processor = make_processor(tmp_path)
+    calls = {"n": 0}
+
+    def failing_download(_url):
+        calls["n"] += 1
+        raise ZammadError("network down")
+
+    with (
+        patch.object(processor.zammad, "get_attachment", failing_download),
+        patch("app.processor.time.sleep"),
+    ):
+        result = processor.process(payload(), retries=False)
+
+    assert calls["n"] == 1
+    assert result["success"] is False
+    download_step = [s for s in result["steps"] if s["step"] == "download"][0]
+    assert download_step["status"] == "error"
+    assert "network down" in download_step["error"]
+
+
+def test_process_manual_success(tmp_path):
+    """Le pipeline manuel rapporte chaque étape (ticket, article, download, transcription)."""
+    processor = make_processor(tmp_path)
+    reported = []
+
+    def progress(name, entry):
+        reported[:] = [s for s in reported if s != name] + [name]
+
+    with (
+        patch.object(processor.zammad, "get_ticket", side_effect=ZammadError("404")),
+        patch.object(
+            processor.zammad,
+            "find_ticket_by_number",
+            return_value={
+                "id": 6475,
+                "number": "202608069400166",
+                "title": "Nouveau message vocal",
+                "customer_id": 8,
+                "customer": {},
+            },
+        ),
+        patch.object(
+            processor.zammad,
+            "get_ticket_articles",
+            return_value=[
+                {
+                    "id": 104,
+                    "body": "De: +33 6 12 34 56 78<br>Appel manqué",
+                    "attachments": [{"id": 174, "filename": "voicemail.mp3"}],
+                }
+            ],
+        ),
+        patch.object(processor.zammad, "get_attachment", return_value=b"x") as mock_get_attachment,
+        patch.object(processor.transcriber, "transcribe", return_value="bonjour test"),
+        patch.object(
+            processor.titles, "generate", return_value={"title": "Titre", "customer_name": "Alice"}
+        ),
+        # Résolution client par téléphone : le body (De: +33...) est bien transmis
+        patch.object(
+            processor.zammad,
+            "find_user_by_phone",
+            return_value={"id": 42, "firstname": "Alice", "lastname": "Dupont"},
+        ),
+        patch.object(processor.zammad, "update_ticket", return_value={}),
+        patch.object(processor.zammad, "create_article", return_value={}),
+    ):
+        result = processor.process_manual(202608069400166, progress=progress)
+
+    assert result["success"] is True
+    assert result["ticket_id"] == 6475
+    assert result["title"] == "Titre"
+    assert result["transcript"] == "bonjour test"
+    assert result["customer_id"] == 42
+    assert reported == ["ticket", "article", "download", "transcription"]
+    assert [s["step"] for s in result["steps"]] == [
+        "ticket",
+        "article",
+        "download",
+        "transcription",
+    ]
+    # L'URL de l'attachment est construite (l'API Zammad n'en renvoie pas)
+    attachment_url = "http://zammad.example.com/api/v1/ticket_attachment/6475/104/174"
+    assert mock_get_attachment.call_args.args[0] == attachment_url
+
+
+def test_process_manual_ticket_not_found(tmp_path):
+    processor = make_processor(tmp_path)
+
+    with (
+        patch.object(processor.zammad, "get_ticket", side_effect=ZammadError("404")),
+        patch.object(processor.zammad, "find_ticket_by_number", return_value=None),
+    ):
+        result = processor.process_manual(99999)
+
+    assert result["success"] is False
+    ticket_step = result["steps"][0]
+    assert ticket_step["step"] == "ticket"
+    assert ticket_step["status"] == "error"
+
+
+def test_process_manual_no_audio_article(tmp_path):
+    processor = make_processor(tmp_path)
+
+    with (
+        patch.object(
+            processor.zammad,
+            "get_ticket",
+            return_value={
+                "id": 6475,
+                "number": "202608069400166",
+                "title": "T",
+                "customer_id": 8,
+                "customer": {},
+            },
+        ),
+        patch.object(
+            processor.zammad,
+            "get_ticket_articles",
+            return_value=[{"id": 104, "attachments": [{"id": 1, "filename": "doc.pdf"}]}],
+        ),
+    ):
+        result = processor.process_manual(6475)
+
+    assert result["success"] is False
+    article_step = [s for s in result["steps"] if s["step"] == "article"][0]
+    assert article_step["status"] == "error"
+    assert "audio" in article_step["error"]
+
+
+def test_empty_transcript_fails_step(tmp_path):
     processor = make_processor(tmp_path)
 
     with (
@@ -184,8 +319,12 @@ def test_empty_transcript_raises(tmp_path):
         ),
         patch("app.processor.time.sleep"),
     ):
-        with pytest.raises(RuntimeError):
-            processor.process(payload())
+        result = processor.process(payload())
+
+    assert result["success"] is False
+    transcription_step = [s for s in result["steps"] if s["step"] == "transcription"][0]
+    assert transcription_step["status"] == "error"
+    assert "Transcription vide" in transcription_step["error"]
 
 
 def test_customer_resolution_uses_payload_customer(tmp_path):
