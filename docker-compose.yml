@@ -14,7 +14,8 @@ services:
       - WEBHOOK_SECRET=${WEBHOOK_SECRET}
       - REDIS_URL=redis://redis:6379
       - RQ_QUEUE_NAME=transcription
-      - WHISPER_MODEL=base
+      - WHISPER_MODEL=small
+      - WHISPER_LANGUAGE=fr
       - WHISPER_DEVICE=cpu
       - WHISPER_COMPUTE_TYPE=int8
       - WHISPER_CPU_THREADS=4
@@ -51,7 +52,8 @@ services:
       - WEBHOOK_SECRET=${WEBHOOK_SECRET}
       - REDIS_URL=redis://redis:6379
       - RQ_QUEUE_NAME=transcription
-      - WHISPER_MODEL=base
+      - WHISPER_MODEL=small
+      - WHISPER_LANGUAGE=fr
       - WHISPER_DEVICE=cpu
       - WHISPER_COMPUTE_TYPE=int8
       - WHISPER_CPU_THREADS=4
