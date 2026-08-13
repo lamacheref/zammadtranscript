@@ -6,6 +6,7 @@ import ollama
 from ollama import Client
 
 from .config import Settings
+from .model_download import ensure_ollama_model
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,10 @@ class TitleGenerator:
         }
 
     def generate(self, transcript: str) -> dict:
+        # Filet de sécurité : le modèle doit être présent, sinon on le télécharge
+        # (le démarrage l'a déjà fait automatiquement dans le cas nominal).
+        ensure_ollama_model(self.settings, wait_timeout=15 * 60)
+
         response = self.client.chat(
             model=self.settings.ollama_model,
             messages=[

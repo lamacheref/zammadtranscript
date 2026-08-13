@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import httpx
@@ -12,6 +13,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from .config import Settings, get_settings
 from .logging_config import configure_logging
+from .model_download import ensure_ollama_model_in_background
 from .models import TranscribeRequest, WebhookPayload
 from .queue import (
     enqueue_manual_transcription,
@@ -26,7 +28,17 @@ settings: Settings = get_settings()
 configure_logging(settings.log_level)
 
 BASE_DIR = Path(__file__).parent
-app = FastAPI(title="Zammad Auto Transcription", version="0.1.0")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Télécharge automatiquement le modèle Ollama au premier lancement,
+    # pour que le webhook fonctionne sans erreur dès le départ.
+    ensure_ollama_model_in_background(settings)
+    yield
+
+
+app = FastAPI(title="Zammad Auto Transcription", version="0.1.0", lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
@@ -88,14 +100,18 @@ def health():
 @app.get("/ui/models")
 def ui_models() -> JSONResponse:
     """État des modèles (Ollama/Whisper) et services requis, affiché en barre d'icônes."""
+    from .model_download import get_download_status, model_present
     from .title_generator import TitleGenerator
     from .transcriber import Transcriber
 
     checks: dict = {}
 
+    present = model_present(settings)
     checks["ollama"] = {
         "label": f"Ollama ({settings.ollama_model})",
         **TitleGenerator(settings).available_models(),
+        "downloadable": not present,
+        "download": get_download_status(settings) if not present else None,
     }
 
     checks["whisper"] = {
@@ -133,6 +149,14 @@ def ui_models() -> JSONResponse:
 @app.get("/ui", response_class=HTMLResponse)
 async def ui_index(request: Request):
     return templates.TemplateResponse(request, "index.html", {})
+
+
+@app.post("/ui/models/download")
+def ui_models_download() -> JSONResponse:
+    """Lance (ou rejoint) le téléchargement du modèle Ollama manquant."""
+    from .model_download import start_model_download
+
+    return JSONResponse(content=start_model_download(settings))
 
 
 @app.post("/ui/transcribe", status_code=202)

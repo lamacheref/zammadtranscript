@@ -22,6 +22,14 @@
         .model-chip.error .ico { color: #e74c3c; }
         .model-refresh { background: none; border: none; color: #aaa; cursor: pointer; font-size: 0.9rem; }
         .model-refresh:hover { color: #3498db; }
+        .model-chip.btn { cursor: pointer; border-color: #aed6f1; background: #eaf2f8; color: #1a5276; }
+        .model-chip.btn:hover { background: #d4e6f1; }
+        .model-chip.btn:disabled { opacity: 0.6; cursor: wait; }
+        .model-chip.downloading { cursor: default; flex-direction: column; align-items: stretch; min-width: 230px; background: #ebf5fb; color: #2c3e50; border-color: #3498db; }
+        .model-chip.downloading .dl-top { display: flex; align-items: center; gap: 0.4rem; }
+        .model-chip.downloading .progress-text { font-variant-numeric: tabular-nums; }
+        .progress-bar { display: block; height: 6px; background: #dfe6ea; border-radius: 3px; overflow: hidden; margin-top: 0.35rem; }
+        .progress-bar > span { display: block; height: 100%; background: #3498db; transition: width 0.3s; }
         .card { background: white; border-radius: 8px; padding: 2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
         .form-group { margin-bottom: 1.5rem; }
         label { display: block; font-weight: 600; margin-bottom: 0.5rem; color: #2c3e50; }
@@ -130,20 +138,67 @@
         setInterval(checkHealth, 30000);
 
         async function renderModels() {
+            let anyDownloading = false;
             try {
                 const res = await fetch('/ui/models');
                 if (!res.ok) return;
                 const { checks } = await res.json();
                 const ico = { ok: '✓', warning: '⚠', error: '✕' };
                 modelsBar.innerHTML = '';
-                Object.entries(checks).forEach(([key, c]) => {
-                    const cls = ['ok', 'warning', 'error'].includes(c.status) ? c.status : 'error';
+
+                const plainChip = (key, c, cls) => {
                     const el = document.createElement('span');
                     el.className = `model-chip ${cls}`;
                     el.title = `${c.label || key} — ${c.message || ''}`;
                     el.textContent = `${ico[cls] || '?'} ${c.label || key}`;
-                    modelsBar.appendChild(el);
+                    return el;
+                };
+
+                Object.entries(checks).forEach(([key, c]) => {
+                    const cls = ['ok', 'warning', 'error'].includes(c.status) ? c.status : 'error';
+
+                    // Modèle Ollama manquant : bouton qui lance le téléchargement,
+                    // puis se transforme en barre de progression pendant le pull.
+                    if (key === 'ollama' && c.downloadable) {
+                        const dl = c.download || {};
+                        if (dl.status === 'downloading') {
+                            anyDownloading = true;
+                            const pct = dl.percent != null ? dl.percent : 0;
+                            const el = document.createElement('span');
+                            el.className = 'model-chip downloading';
+                            el.title = `${c.label} — ${dl.message || 'Téléchargement…'}`;
+                            el.innerHTML = `
+                                <span class="dl-top">
+                                    <span class="ico">⬇</span>
+                                    <span>${esc(c.label)}</span>
+                                    <span class="progress-text">${pct}%</span>
+                                </span>
+                                <span class="progress-bar"><span style="width:${pct}%"></span></span>`;
+                            modelsBar.appendChild(el);
+                            return;
+                        }
+                        const btn = document.createElement('button');
+                        btn.className = `model-chip btn${dl.status === 'error' ? ' error' : ''}`;
+                        btn.title = (dl.status === 'error'
+                            ? `Échec du téléchargement : ${dl.message || ''} — `
+                            : '') + `Cliquer pour télécharger ${c.label}`;
+                        btn.textContent = dl.status === 'error'
+                            ? `⚠ Réessayer ${c.label}`
+                            : `⬇ Télécharger ${c.label}`;
+                        btn.addEventListener('click', async () => {
+                            btn.disabled = true;
+                            btn.textContent = 'Démarrage…';
+                            try { await fetch('/ui/models/download', { method: 'POST' }); }
+                            catch (e) { console.error(e); }
+                            renderModels();
+                        });
+                        modelsBar.appendChild(btn);
+                        return;
+                    }
+
+                    modelsBar.appendChild(plainChip(key, c, cls));
                 });
+
                 const refresh = document.createElement('button');
                 refresh.className = 'model-refresh';
                 refresh.title = 'Re-vérifier les modèles';
@@ -153,6 +208,8 @@
             } catch {
                 modelsBar.innerHTML = '<span class="model-chip error"><span class="ico">✕</span> Statut indisponible</span>';
             }
+            // Rafraîchissement rapide tant qu'un modèle est en cours de téléchargement.
+            if (anyDownloading) setTimeout(renderModels, 1500);
         }
         renderModels();
         setInterval(renderModels, 30000);

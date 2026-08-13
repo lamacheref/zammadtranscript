@@ -5,6 +5,13 @@ import pytest
 from app.title_generator import TitleError, TitleGenerator
 
 
+@pytest.fixture(autouse=True)
+def _no_ollama_auto_pull():
+    # generate() déclenche ensure_ollama_model : inutile de télécharger en test.
+    with patch("app.title_generator.ensure_ollama_model", return_value={"status": "ok"}):
+        yield
+
+
 def make_generator():
     settings = MagicMock()
     settings.ollama_url = "http://localhost:11434"
