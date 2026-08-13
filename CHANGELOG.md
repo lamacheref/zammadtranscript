@@ -5,6 +5,19 @@ Toutes les modifications notables de ce projet sont documentées dans ce fichier
 ## [Non publié]
 
 ### Ajouts
+- CI/CD : scission en deux workflows indépendants :
+  - `.github/workflows/ci-cd.yml` (GitHub) : `actions/setup-python`, image poussée sur `ghcr.io`.
+  - `.gitea/workflows/ci-cd.yml` (Gitea) : utilise **UV** au lieu de `actions/setup-python`
+    (échec `Cannot find: node in PATH` sur le runner bare-metal Debian 13),
+    image poussée sur le registre de l'instance Gitea.
+  - Gitea ignore `.github/workflows/` dès que `.gitea/workflows/` existe → pas de double exécution.
+- Téléchargement automatique du modèle Ollama au premier lancement :
+  - `app/model_download.py` : pull du modèle avec progression partagée via Redis
+    (verrou dédupliqué entre l'API et le worker).
+  - Déclenché au démarrage de l'API (lifespan) et du worker.
+  - Filet de sécurité dans `TitleGenerator.generate` (télécharge si absent).
+  - UI : le modèle manquant devient un bouton « Télécharger » qui se transforme
+    en barre de progression pendant le pull (endpoints `POST /ui/models/download`).
 - Création initiale des fichiers de documentation : `PROJET.md`, `README.md`, `TODO.md`, `ROADMAP.md`
 - Rédaction du protocole technique (flux webhook → transcription → LLM → mise à jour Zammad)
 - Spécifications webhook Zammad (`documentations/zammad-webhook.md`)

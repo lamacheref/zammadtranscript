@@ -101,6 +101,34 @@ Variables d'environnement (`.env`) :
 - Un commit `feat:` est une **minor** (incrémente `m`, remet `f` à 0).
 - Le **major** (`M`) n'est jamais modifié automatiquement.
 
+## CI/CD
+
+Chaque forge a **son propre workflow** (Gitea ignore `.github/workflows/` dès que `.gitea/workflows/` existe, plus de double exécution) :
+
+| Forge | Workflow |
+|-------|----------|
+| GitHub | `.github/workflows/ci-cd.yml` |
+| Gitea | `.gitea/workflows/ci-cd.yml` |
+
+Chaque forge pousse son image Docker dans **son propre registre** :
+
+| Forge | Registre |
+|-------|----------|
+| GitHub | `ghcr.io/flamachere/zammadtranscript` |
+| Gitea | `gitea.smiden.eu/flamachere/zammadtranscript` |
+
+Pour l'authentification au push de l'image :
+
+- **GitHub** : le `GITHUB_TOKEN` automatique suffit.
+- **Gitea** : le `GITHUB_TOKEN` de Gitea Actions est refusé au push (`reqPackageAccess`) — il faut créer un secret `REGISTRY_TOKEN` contenant un **PAT Gitea** (profil → Applications → Générer un nouveau jeton, avec l'accès `write:package`). Le workflow utilise `REGISTRY_TOKEN` s'il est défini, sinon `GITHUB_TOKEN`.
+
+Sur Gitea, le runner étant bare-metal, `actions/setup-python` échoue
+(`Cannot find: node in PATH`) : le workflow utilise **UV** (`uv python install 3.12`
++ `uv venv`) à la place. Ajustez `runs-on:` au label de votre `act_runner` si
+nécessaire.
+
+En production, on peut indifféremment tirer l'image de l'un ou de l'autre registre.
+
 ## Historique des commits
 
 ### a267bd9 — fix: keep app/static directory tracked (empty dir not versioned by git)
@@ -253,6 +281,33 @@ Environment variables (`.env`):
 - Every change since the last bump is a **fix** (increments `f`).
 - A `feat:` commit is a **minor** (increments `m`, resets `f` to 0).
 - The **major** (`M`) is never modified automatically.
+
+## CI/CD
+
+Each forge has **its own workflow** (Gitea ignores `.github/workflows/` as soon as `.gitea/workflows/` exists, no more duplicate runs):
+
+| Forge | Workflow |
+|-------|----------|
+| GitHub | `.github/workflows/ci-cd.yml` |
+| Gitea | `.gitea/workflows/ci-cd.yml` |
+
+Each forge pushes its Docker image to **its own registry**:
+
+| Forge | Registry |
+|-------|----------|
+| GitHub | `ghcr.io/flamachere/zammadtranscript` |
+| Gitea | `gitea.smiden.eu/flamachere/zammadtranscript` |
+
+Image push authentication:
+
+- **GitHub**: the automatic `GITHUB_TOKEN` is enough.
+- **Gitea**: Gitea Actions' `GITHUB_TOKEN` is rejected on push (`reqPackageAccess`) — create a `REGISTRY_TOKEN` secret containing a **Gitea PAT** (Profile → Applications → Generate New Token, with `write:package` scope). The workflow uses `REGISTRY_TOKEN` if defined, otherwise falls back to `GITHUB_TOKEN`.
+
+On Gitea, the runner is bare-metal, so `actions/setup-python` fails
+(`Cannot find: node in PATH`): the workflow uses **UV** (`uv python install 3.12`
++ `uv venv`) instead. Adjust `runs-on:` to your `act_runner` label if needed.
+
+In production, the image can be pulled from either registry.
 
 ## Commit History
 
