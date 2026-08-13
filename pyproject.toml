@@ -12,5 +12,6 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 # Rendre `app` et `scripts` importables quel que soit l'invocation de pytest
 # (nécessaire sous `uv run pytest`, qui n'ajoute pas le cwd au sys.path).
-pythonpath = ["."]
+# NB : pas de crochets — pythonpath attend un chemin simple (type pathlist).
+pythonpath = "."
 testpaths = ["tests"]

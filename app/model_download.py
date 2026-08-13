@@ -134,6 +134,7 @@ def _ensure_safe(settings) -> None:
 def _pull_worker(settings) -> None:
     conn = get_redis_connection(settings)
     model = settings.ollama_model
+    client = ollama.Client(host=settings.ollama_url)
 
     def push(status: str, message: str, completed=None, total=None) -> None:
         payload = {
@@ -152,7 +153,7 @@ def _pull_worker(settings) -> None:
     logger.info("Téléchargement du modèle Ollama '%s'…", model)
     push("downloading", f"Téléchargement de {model}…")
     try:
-        for progress in ollama.pull(model, stream=True):
+        for progress in client.pull(model, stream=True):
             push(
                 "downloading",
                 getattr(progress, "status", "") or "Téléchargement…",

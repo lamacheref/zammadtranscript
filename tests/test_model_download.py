@@ -153,3 +153,20 @@ def test_ensure_reports_error(mock_present, mock_start, mock_status):
     mock_status.return_value = {"status": "error", "message": "disk full"}
     result = model_download.ensure_ollama_model(make_settings(), wait_timeout=3)
     assert result["status"] == "error"
+
+
+# ── _pull_worker ───────────────────────────────────────────────────────────────
+
+
+@patch("app.model_download.get_redis_connection")
+def test_pull_worker_uses_configured_ollama_host(mock_conn):
+    """Le pull doit utiliser settings.ollama_url, pas localhost (bug Connection refused)."""
+    client = MagicMock()
+    client.pull.return_value = iter([MagicMock(status="success")])
+    mock_conn.return_value = MagicMock()
+
+    with patch.object(model_download.ollama, "Client", return_value=client) as mock_cls:
+        model_download._pull_worker(make_settings(ollama_url="http://ollama:11434"))
+
+    mock_cls.assert_called_once_with(host="http://ollama:11434")
+    client.pull.assert_called_once_with("llama3.2", stream=True)
